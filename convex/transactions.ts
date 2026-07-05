@@ -5,6 +5,13 @@ import { billingCycle } from "./schema";
 import { requireUserId } from "./lib/user";
 import { addBillingPeriod } from "./lib/subscriptionDates";
 import { buildEmiPaymentPatch, clampInstallmentDate, getExtraPaymentMessage, inferPastLoanSchedule, resolveLoanTerms } from "./lib/emi";
+import { normalizeCurrencyFields } from "./lib/currency";
+
+const currencyFields = {
+  originalAmount: v.optional(v.union(v.number(), v.null())),
+  originalCurrency: v.optional(v.union(v.string(), v.null())),
+  exchangeRate: v.optional(v.union(v.number(), v.null())),
+};
 
 export type EnrichedTransaction = Doc<"transactions"> & {
   categoryName: string | null;
@@ -119,6 +126,7 @@ export const create = mutation({
   args: {
     type: v.union(v.literal("income"), v.literal("expense")),
     amount: v.number(),
+    ...currencyFields,
     description: v.optional(v.string()),
     categoryId: v.optional(v.id("categories")),
     accountId: v.optional(v.id("accounts")),
@@ -148,6 +156,13 @@ export const create = mutation({
   handler: async (ctx, args) => {
     const userId = await requireUserId(ctx);
     if (!(args.amount > 0)) throw new Error("Amount must be greater than 0");
+
+    const currency = normalizeCurrencyFields({
+      amount: args.amount,
+      originalAmount: args.originalAmount,
+      originalCurrency: args.originalCurrency,
+      exchangeRate: args.exchangeRate,
+    });
 
     if (args.categoryId) {
       const category = await ctx.db.get(args.categoryId);
@@ -180,7 +195,7 @@ export const create = mutation({
         subscriptionId = sub._id;
         await ctx.db.patch(sub._id, {
           nextRenewalDate: addBillingPeriod(args.date, sub.billingCycle),
-          amount: args.amount,
+          amount: currency.amount,
           isActive: true,
           accountId: args.accountId ?? sub.accountId,
           categoryId: args.categoryId ?? sub.categoryId,
@@ -193,7 +208,7 @@ export const create = mutation({
         subscriptionId = await ctx.db.insert("subscriptions", {
           userId,
           name,
-          amount: args.amount,
+          amount: currency.amount,
           billingCycle: link.billingCycle,
           categoryId: args.categoryId,
           accountId: args.accountId,
@@ -213,7 +228,7 @@ export const create = mutation({
         if (!emi || emi.userId !== userId) throw new Error("EMI not found");
 
         emiId = emi._id;
-        const result = buildEmiPaymentPatch(emi, args.date, args.amount, {
+        const result = buildEmiPaymentPatch(emi, args.date, currency.amount, {
           accountId: args.accountId ?? emi.accountId,
           categoryId: args.categoryId ?? emi.categoryId,
         });
@@ -225,7 +240,7 @@ export const create = mutation({
 
         const tenure = link.tenureMonths ?? link.totalInstallments;
         const resolved = resolveLoanTerms({
-          amount: args.amount,
+          amount: currency.amount,
           principalAmount: link.principalAmount,
           interestRate: link.interestRate,
           tenureMonths: tenure,
@@ -252,12 +267,12 @@ export const create = mutation({
           principalAmount: link.principalAmount,
           interestRate: resolved.interestRate ?? link.interestRate,
           loanDate: link.loanDate,
-          extraPaidTotal: Math.max(0, Math.round((args.amount - expectedEmi) * 100) / 100),
+          extraPaidTotal: Math.max(0, Math.round((currency.amount - expectedEmi) * 100) / 100),
           isActive: tenure == null || paidInstallments < tenure,
           notes: args.description?.trim() || undefined,
         });
 
-        const extra = Math.max(0, Math.round((args.amount - expectedEmi) * 100) / 100);
+        const extra = Math.max(0, Math.round((currency.amount - expectedEmi) * 100) / 100);
         if (extra > 0) {
           emiFeedback = {
             extraAmount: extra,
@@ -271,7 +286,10 @@ export const create = mutation({
     const transactionId = await ctx.db.insert("transactions", {
       userId,
       type: args.type,
-      amount: args.amount,
+      amount: currency.amount,
+      originalAmount: currency.originalAmount,
+      originalCurrency: currency.originalCurrency,
+      exchangeRate: currency.exchangeRate,
       description: args.description?.trim() || undefined,
       categoryId: args.categoryId,
       accountId: args.accountId,
@@ -289,6 +307,7 @@ export const update = mutation({
     id: v.id("transactions"),
     type: v.optional(v.union(v.literal("income"), v.literal("expense"))),
     amount: v.optional(v.number()),
+    ...currencyFields,
     description: v.optional(v.union(v.string(), v.null())),
     categoryId: v.optional(v.union(v.id("categories"), v.null())),
     accountId: v.optional(v.union(v.id("accounts"), v.null())),
@@ -303,10 +322,33 @@ export const update = mutation({
     const patch: Partial<Doc<"transactions">> = {};
 
     if (args.type !== undefined) patch.type = args.type;
-    if (args.amount !== undefined) {
-      if (!(args.amount > 0)) throw new Error("Amount must be greater than 0");
-      patch.amount = args.amount;
+
+    if (
+      args.amount !== undefined ||
+      args.originalAmount !== undefined ||
+      args.originalCurrency !== undefined ||
+      args.exchangeRate !== undefined
+    ) {
+      if (args.amount !== undefined && !(args.amount > 0)) {
+        throw new Error("Amount must be greater than 0");
+      }
+
+      const currency = normalizeCurrencyFields({
+        amount: args.amount ?? current.amount,
+        originalAmount:
+          args.originalAmount !== undefined ? args.originalAmount : current.originalAmount,
+        originalCurrency:
+          args.originalCurrency !== undefined ? args.originalCurrency : current.originalCurrency,
+        exchangeRate:
+          args.exchangeRate !== undefined ? args.exchangeRate : current.exchangeRate,
+      });
+
+      patch.amount = currency.amount;
+      patch.originalAmount = currency.originalAmount;
+      patch.originalCurrency = currency.originalCurrency;
+      patch.exchangeRate = currency.exchangeRate;
     }
+
     if (args.date !== undefined) patch.date = args.date;
     if (args.description !== undefined) {
       patch.description = args.description?.trim() || undefined;

@@ -154,7 +154,14 @@ export default defineSchema({
   transactions: defineTable({
     userId: v.optional(v.id("users")),
     type: v.union(v.literal("income"), v.literal("expense")),
+    /** Amount in base currency (INR) used for stats and balances */
     amount: v.number(),
+    /** Original amount when logged in a foreign currency */
+    originalAmount: v.optional(v.number()),
+    /** ISO 4217 code, e.g. USD, EUR */
+    originalCurrency: v.optional(v.string()),
+    /** Snapshot: 1 originalCurrency = exchangeRate INR */
+    exchangeRate: v.optional(v.number()),
     description: v.optional(v.string()),
     categoryId: v.optional(v.id("categories")),
     accountId: v.optional(v.id("accounts")),
