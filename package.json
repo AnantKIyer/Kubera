@@ -1,6 +1,6 @@
 {
-  "name": "finance-manager",
-  "version": "1.0.0",
+  "name": "kubera",
+  "version": "2.0.0",
   "private": true,
   "scripts": {
     "dev": "next dev",
@@ -8,15 +8,22 @@
     "build": "node scripts/generate-pwa-icons.mjs && next build",
     "pwa:icons": "node scripts/generate-pwa-icons.mjs",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "convex:codegen": "convex codegen",
+    "setup:auth": "node scripts/setup-convex-auth-env.mjs"
   },
   "dependencies": {
+    "@auth/core": "^0.41.1",
+    "@convex-dev/auth": "^0.0.94",
+    "@oslojs/crypto": "^1.0.1",
+    "clsx": "^2.1.1",
+    "convex": "^1.42.1",
+    "lucide-react": "^0.294.0",
     "next": "^14.0.4",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
-    "better-sqlite3": "^9.2.2",
-    "date-fns": "^2.30.0",
-    "lucide-react": "^0.294.0"
+    "recharts": "^3.9.2",
+    "tailwind-merge": "^3.6.0"
   },
   "devDependencies": {
     "@ducanh2912/next-pwa": "^10.2.9",
@@ -30,4 +37,3 @@
     "sharp": "^0.33.5"
   }
 }
-

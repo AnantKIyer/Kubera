@@ -1,0 +1,80 @@
+import {
+  Briefcase,
+  Car,
+  CircleDashed,
+  Circle,
+  Clapperboard,
+  Gift,
+  GraduationCap,
+  HeartPulse,
+  Home,
+  Laptop,
+  Plane,
+  PlusCircle,
+  Receipt,
+  ShoppingBag,
+  ShoppingCart,
+  TrendingUp,
+  Utensils,
+  Wallet,
+  Coffee,
+  Dumbbell,
+  Fuel,
+  PiggyBank,
+  Smartphone,
+  Wifi,
+  type LucideIcon,
+} from "lucide-react";
+
+export const CATEGORY_ICONS: Record<string, LucideIcon> = {
+  briefcase: Briefcase,
+  laptop: Laptop,
+  "trending-up": TrendingUp,
+  gift: Gift,
+  "plus-circle": PlusCircle,
+  utensils: Utensils,
+  "shopping-cart": ShoppingCart,
+  "shopping-bag": ShoppingBag,
+  car: Car,
+  home: Home,
+  receipt: Receipt,
+  clapperboard: Clapperboard,
+  "heart-pulse": HeartPulse,
+  "graduation-cap": GraduationCap,
+  plane: Plane,
+  "circle-dashed": CircleDashed,
+  circle: Circle,
+  wallet: Wallet,
+  coffee: Coffee,
+  dumbbell: Dumbbell,
+  fuel: Fuel,
+  "piggy-bank": PiggyBank,
+  smartphone: Smartphone,
+  wifi: Wifi,
+};
+
+export const ICON_OPTIONS = Object.keys(CATEGORY_ICONS);
+
+export function getCategoryIcon(icon: string | null | undefined): LucideIcon {
+  return (icon && CATEGORY_ICONS[icon]) || Circle;
+}
+
+// Curated palette for the category editor.
+export const COLOR_OPTIONS = [
+  "#22c55e",
+  "#10b981",
+  "#14b8a6",
+  "#06b6d4",
+  "#0ea5e9",
+  "#3b82f6",
+  "#6366f1",
+  "#8b5cf6",
+  "#a855f7",
+  "#ec4899",
+  "#f43f5e",
+  "#ef4444",
+  "#f97316",
+  "#eab308",
+  "#84cc16",
+  "#94a3b8",
+];
