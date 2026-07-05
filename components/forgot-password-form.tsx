@@ -4,7 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { useAuthActions } from "@convex-dev/auth/react";
 import { FormError, FormField, Input } from "@/components/ui/form";
-import { parseAuthError } from "@/lib/auth/errors";
+import { parseUserError } from "@/lib/errors";
 
 type Step = "request" | { phone: string };
 
@@ -33,7 +33,7 @@ export function ForgotPasswordForm() {
         "If SMS is not configured, check the Convex dashboard logs for your OTP code.",
       );
     } catch (err) {
-      setError(parseAuthError(err, "Could not send verification code."));
+      setError(parseUserError(err, "We couldn't send a verification code. Check your phone number and try again."));
     } finally {
       setLoading(false);
     }
@@ -52,7 +52,7 @@ export function ForgotPasswordForm() {
         newPassword,
       });
     } catch (err) {
-      setError(parseAuthError(err, "Invalid code or password."));
+      setError(parseUserError(err, "That code or password didn't work. Please try again."));
     } finally {
       setLoading(false);
     }
@@ -93,7 +93,13 @@ export function ForgotPasswordForm() {
             />
           </FormField>
 
-          {error && <FormError message={error} />}
+          {error && (
+            <FormError
+              title="Password reset failed"
+              message={error}
+              onDismiss={() => setError(null)}
+            />
+          )}
           {devHint && !error && (
             <p className="text-xs text-muted-foreground">{devHint}</p>
           )}
@@ -146,7 +152,13 @@ export function ForgotPasswordForm() {
           />
         </FormField>
 
-        {error && <FormError message={error} />}
+        {error && (
+          <FormError
+            title="Couldn't send code"
+            message={error}
+            onDismiss={() => setError(null)}
+          />
+        )}
 
         <button
           type="submit"

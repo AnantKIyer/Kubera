@@ -1,4 +1,5 @@
 import { cn } from "@/lib/utils";
+import { Alert } from "@/components/ui/alert";
 import {
   ComponentType,
   InputHTMLAttributes,
@@ -101,15 +102,43 @@ export function FormField({
   );
 }
 
-export function FormError({ message }: { message: string }) {
+export function FormError({
+  message,
+  title,
+  onDismiss,
+}: {
+  message: string;
+  title?: string;
+  onDismiss?: () => void;
+}) {
   return (
-    <div
-      role="alert"
-      className="rounded-xl border border-[hsl(var(--expense))]/20 bg-[hsl(var(--expense))]/8 px-3.5 py-2.5 text-sm text-[hsl(var(--expense))]"
-    >
-      {message}
-    </div>
+    <Alert
+      variant="error"
+      title={title}
+      message={message}
+      onDismiss={onDismiss}
+    />
   );
+}
+
+export function FormWarning({
+  message,
+  title,
+}: {
+  message: string;
+  title?: string;
+}) {
+  return <Alert variant="warning" title={title} message={message} />;
+}
+
+export function FormSuccess({
+  message,
+  title,
+}: {
+  message: string;
+  title?: string;
+}) {
+  return <Alert variant="success" title={title} message={message} />;
 }
 
 export function FormHint({ children }: { children: ReactNode }) {

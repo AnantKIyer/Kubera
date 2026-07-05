@@ -2,7 +2,6 @@ import {
   createAccount,
   invalidateSessions,
   modifyAccountCredentials,
-  retrieveAccount,
   signInViaProvider,
 } from "@convex-dev/auth/server";
 import { ConvexCredentials } from "@convex-dev/auth/providers/ConvexCredentials";
@@ -11,6 +10,7 @@ import { Id } from "../_generated/dataModel";
 import { Scrypt } from "lucia";
 import { internal } from "../_generated/api";
 import { PhonePasswordReset } from "../PhonePasswordReset";
+import { retrieveAccountOrThrow } from "../lib/retrieveAccount";
 import {
   isValidEmail,
   isValidPhone,
@@ -123,11 +123,10 @@ export const KuberaPassword = ConvexCredentials({
       if (!password) throw new ConvexError("Password is required.");
 
       const email = await resolveUserEmail(ctx, identifier);
-      const retrieved = await retrieveAccount(ctx, {
+      const retrieved = await retrieveAccountOrThrow(ctx, {
         provider: PROVIDER_ID,
         account: { id: email, secret: password },
       });
-      if (retrieved === null) throw new ConvexError("Invalid credentials");
       return { userId: retrieved.user._id };
     }
 
@@ -143,11 +142,15 @@ export const KuberaPassword = ConvexCredentials({
       }
 
       const email = normalizeEmail(user.email);
-      const retrieved = await retrieveAccount(ctx, {
-        provider: PROVIDER_ID,
-        account: { id: email },
-      });
-      if (retrieved === null) {
+      let retrieved;
+      try {
+        retrieved = await retrieveAccountOrThrow(
+          ctx,
+          { provider: PROVIDER_ID, account: { id: email } },
+          "No account found with this phone number.",
+        );
+      } catch (err) {
+        if (err instanceof ConvexError) throw err;
         throw new ConvexError("No account found with this phone number.");
       }
       const { account } = retrieved;
@@ -170,7 +173,7 @@ export const KuberaPassword = ConvexCredentials({
       if (!user?.email) throw new ConvexError("Invalid code.");
 
       const email = normalizeEmail(user.email);
-      const { account: resetAccount } = await retrieveAccount(ctx, {
+      const { account: resetAccount } = await retrieveAccountOrThrow(ctx, {
         provider: PROVIDER_ID,
         account: { id: email },
       });

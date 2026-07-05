@@ -2,8 +2,8 @@ import { ConvexError, v } from "convex/values";
 import {
   getAuthUserId,
   modifyAccountCredentials,
-  retrieveAccount,
 } from "@convex-dev/auth/server";
+import { retrieveAccountOrThrow } from "./lib/retrieveAccount";
 import { Id } from "./_generated/dataModel";
 import { action, internalQuery, mutation, query } from "./_generated/server";
 import { internal } from "./_generated/api";
@@ -137,11 +137,15 @@ export const changePassword = action({
       throw new ConvexError("Password change is not available for this account.");
     }
 
-    const retrieved = await retrieveAccount(ctx, {
-      provider: PROVIDER_ID,
-      account: { id: account.email, secret: currentPassword },
-    });
-    if (retrieved === null || retrieved.user._id !== userId) {
+    const retrieved = await retrieveAccountOrThrow(
+      ctx,
+      {
+        provider: PROVIDER_ID,
+        account: { id: account.email, secret: currentPassword },
+      },
+      "Current password is incorrect.",
+    );
+    if (retrieved.user._id !== userId) {
       throw new ConvexError("Current password is incorrect.");
     }
 

@@ -5,7 +5,7 @@ import { useAction } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { Button } from "@/components/ui/button";
 import { FormError, FormField, Input } from "@/components/ui/form";
-import { parseAuthError } from "@/lib/auth/errors";
+import { parseUserError } from "@/lib/errors";
 
 export function ChangePasswordForm() {
   const changePassword = useAction(api.users.changePassword);
@@ -38,7 +38,7 @@ export function ChangePasswordForm() {
       setNewPassword("");
       setConfirmPassword("");
     } catch (err) {
-      setError(parseAuthError(err, "Could not change password."));
+      setError(parseUserError(err, "Your password wasn't updated. Check your current password and try again."));
     } finally {
       setLoading(false);
     }
@@ -78,7 +78,13 @@ export function ChangePasswordForm() {
         />
       </FormField>
 
-      {error && <FormError message={error} />}
+      {error && (
+        <FormError
+          title="Password not updated"
+          message={error}
+          onDismiss={() => setError(null)}
+        />
+      )}
       {success && (
         <p className="text-sm text-income">Password updated successfully.</p>
       )}

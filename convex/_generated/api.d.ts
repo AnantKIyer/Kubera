@@ -19,6 +19,7 @@ import type * as http from "../http.js";
 import type * as investments from "../investments.js";
 import type * as lib_credit from "../lib/credit.js";
 import type * as lib_emi from "../lib/emi.js";
+import type * as lib_retrieveAccount from "../lib/retrieveAccount.js";
 import type * as lib_subscriptionDates from "../lib/subscriptionDates.js";
 import type * as lib_user from "../lib/user.js";
 import type * as migrations from "../migrations.js";
@@ -47,6 +48,7 @@ declare const fullApi: ApiFromModules<{
   investments: typeof investments;
   "lib/credit": typeof lib_credit;
   "lib/emi": typeof lib_emi;
+  "lib/retrieveAccount": typeof lib_retrieveAccount;
   "lib/subscriptionDates": typeof lib_subscriptionDates;
   "lib/user": typeof lib_user;
   migrations: typeof migrations;
