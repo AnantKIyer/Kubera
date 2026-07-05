@@ -1,23 +1,25 @@
-import type { Metadata } from 'next'
-import { Inter } from 'next/font/google'
-import './globals.css'
+import type { Metadata } from "next";
+import { DM_Sans } from "next/font/google";
+import "./globals.css";
+import { Providers } from "./providers";
 
-const inter = Inter({ subsets: ['latin'] })
+const dmSans = DM_Sans({
+  subsets: ["latin"],
+  variable: "--font-sans",
+  weight: ["400", "500", "600", "700"],
+});
 
 export const metadata: Metadata = {
-  title: 'Finance Manager - Track Your Income & Expenses',
-  description: 'A comprehensive day-to-day finance tracker',
-}
+  title: "Kubera — Personal Finance",
+  description: "A calm, personal finance workspace for tracking money with clarity.",
+};
 
-export default function RootLayout({
-  children,
-}: {
-  children: React.ReactNode
-}) {
+export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en">
-      <body className={inter.className}>{children}</body>
+    <html lang="en" suppressHydrationWarning>
+      <body className={`${dmSans.variable} font-sans antialiased paper-surface`}>
+        <Providers>{children}</Providers>
+      </body>
     </html>
-  )
+  );
 }
-
