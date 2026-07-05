@@ -5,7 +5,22 @@ import { ConvexAuthProvider } from "@convex-dev/auth/react";
 import { ConvexReactClient } from "convex/react";
 import { ThemeProvider } from "@/components/theme-provider";
 
-const convexUrl = process.env.NEXT_PUBLIC_CONVEX_URL;
+function normalizeConvexUrl(raw: string | undefined): string | undefined {
+  if (!raw) return undefined;
+
+  let value = raw.trim();
+  if (!value) return undefined;
+
+  // Common copy-paste mistake: entire env line used as the value.
+  const keyPrefix = "NEXT_PUBLIC_CONVEX_URL=";
+  if (value.startsWith(keyPrefix)) {
+    value = value.slice(keyPrefix.length).trim();
+  }
+
+  return value || undefined;
+}
+
+const convexUrl = normalizeConvexUrl(process.env.NEXT_PUBLIC_CONVEX_URL);
 
 export function Providers({ children }: { children: ReactNode }) {
   const client = useMemo(

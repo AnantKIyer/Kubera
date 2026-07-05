@@ -6,7 +6,7 @@ import { useAuthActions } from "@convex-dev/auth/react";
 import { useConvex } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { FormError, FormField, Input } from "@/components/ui/form";
-import { parseAuthError } from "@/lib/auth/errors";
+import { parseUserError } from "@/lib/errors";
 import { isValidUsername, normalizeUsername } from "@/lib/auth/normalize";
 import { cn } from "@/lib/utils";
 
@@ -94,7 +94,7 @@ export function SignUpForm() {
         password,
       });
     } catch (err) {
-      setError(parseAuthError(err, "Could not create account. Please check your details."));
+      setError(parseUserError(err, "We couldn't create your account. Please check your details and try again."));
     } finally {
       setLoading(false);
     }
@@ -172,7 +172,13 @@ export function SignUpForm() {
           />
         </FormField>
 
-        {error && <FormError message={error} />}
+        {error && (
+          <FormError
+            title="Sign up failed"
+            message={error}
+            onDismiss={() => setError(null)}
+          />
+        )}
 
         <button
           type="submit"

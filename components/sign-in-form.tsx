@@ -4,7 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { useAuthActions } from "@convex-dev/auth/react";
 import { FormError, FormField, Input } from "@/components/ui/form";
-import { parseAuthError } from "@/lib/auth/errors";
+import { parseUserError } from "@/lib/errors";
 
 export function SignInForm() {
   const { signIn } = useAuthActions();
@@ -24,7 +24,7 @@ export function SignInForm() {
         password,
       });
     } catch (err) {
-      setError(parseAuthError(err, "Invalid email, username, phone, or password."));
+      setError(parseUserError(err, "Check your email, username, phone, and password, then try again."));
     } finally {
       setLoading(false);
     }
@@ -65,7 +65,13 @@ export function SignInForm() {
           </Link>
         </div>
 
-        {error && <FormError message={error} />}
+        {error && (
+          <FormError
+            title="Couldn't sign you in"
+            message={error}
+            onDismiss={() => setError(null)}
+          />
+        )}
 
         <button
           type="submit"

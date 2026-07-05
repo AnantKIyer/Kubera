@@ -13,6 +13,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { FormError, FormField, Input } from "@/components/ui/form";
 import { Skeleton } from "@/components/ui/misc";
 import { getUserDisplayName } from "@/lib/user-display";
+import { parseUserError } from "@/lib/errors";
 
 export default function SettingsPage() {
   const user = useQuery(api.users.me);
@@ -35,7 +36,7 @@ export default function SettingsPage() {
       await updateProfile({ name: name.trim() });
       setSaved(true);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not save changes.");
+      setError(parseUserError(err, "We couldn't update your profile. Please try again."));
     } finally {
       setLoading(false);
     }
@@ -107,7 +108,13 @@ export default function SettingsPage() {
                 />
               </FormField>
 
-              {error && <FormError message={error} />}
+              {error && (
+                <FormError
+                  title="Profile not updated"
+                  message={error}
+                  onDismiss={() => setError(null)}
+                />
+              )}
               {saved && (
                 <p className="text-sm text-income">Profile saved successfully.</p>
               )}

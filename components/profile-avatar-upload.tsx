@@ -7,6 +7,7 @@ import { Camera, Loader2, Trash2 } from "lucide-react";
 import { UserAvatar } from "@/components/user-avatar";
 import { Button } from "@/components/ui/button";
 import { FormError } from "@/components/ui/form";
+import { parseUserError } from "@/lib/errors";
 
 const MAX_BYTES = 2 * 1024 * 1024;
 
@@ -50,7 +51,7 @@ export function ProfileAvatarUpload({
       const { storageId } = await response.json();
       await updateProfileImage({ storageId });
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not upload photo.");
+      setError(parseUserError(err, "We couldn't upload your photo. Please try again."));
     } finally {
       setUploading(false);
       if (inputRef.current) inputRef.current.value = "";
@@ -63,7 +64,7 @@ export function ProfileAvatarUpload({
     try {
       await removeProfileImage();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not remove photo.");
+      setError(parseUserError(err, "We couldn't remove your photo. Please try again."));
     } finally {
       setUploading(false);
     }
@@ -123,7 +124,13 @@ export function ProfileAvatarUpload({
       </div>
 
       <p className="text-xs text-muted-foreground">JPG, PNG, or WebP. Max 2 MB.</p>
-      {error && <FormError message={error} />}
+      {error && (
+        <FormError
+          title="Photo update failed"
+          message={error}
+          onDismiss={() => setError(null)}
+        />
+      )}
     </div>
   );
 }

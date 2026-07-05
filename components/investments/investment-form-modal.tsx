@@ -40,6 +40,7 @@ import {
   showsStartDate,
 } from "@/lib/investments";
 import { cn } from "@/lib/utils";
+import { parseUserError } from "@/lib/errors";
 
 const FORM_ID = "investment-form";
 
@@ -212,7 +213,7 @@ export function InvestmentFormModal({
       }
       onClose();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Something went wrong");
+      setError(parseUserError(err, "We couldn't save this investment. Please try again."));
     }
   };
 
@@ -343,7 +344,13 @@ export function InvestmentFormModal({
             />
           </FormField>
 
-          {error && <FormError message={error} />}
+          {error && (
+            <FormError
+              title="Couldn't save investment"
+              message={error}
+              onDismiss={() => setError(null)}
+            />
+          )}
         </FormBody>
       </form>
     </Modal>

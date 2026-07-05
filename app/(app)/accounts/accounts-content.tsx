@@ -28,6 +28,7 @@ import {
 import { EmisSection, type EmisSectionHandle } from "@/components/accounts/emis-section";
 import { COLOR_OPTIONS } from "@/lib/icons";
 import { formatCurrency, formatPercent, currentMonth } from "@/lib/format";
+import { parseUserError } from "@/lib/errors";
 import { cn } from "@/lib/utils";
 
 const FORM_ID = "account-form";
@@ -203,7 +204,7 @@ export default function AccountsPageContent() {
       }
       setOpen(false);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Something went wrong");
+      setError(parseUserError(err, "We couldn't save this account. Please try again."));
     }
   };
 
@@ -552,7 +553,13 @@ export default function AccountsPageContent() {
                   <ColorPicker value={color} onChange={setColor} colors={COLOR_OPTIONS} />
                 </FormSection>
 
-                {error && <FormError message={error} />}
+                {error && (
+                  <FormError
+                    title="Couldn't save account"
+                    message={error}
+                    onDismiss={() => setError(null)}
+                  />
+                )}
               </FormBody>
             </form>
           </Modal>

@@ -26,6 +26,7 @@ import {
   ICON_OPTIONS,
   getCategoryIcon,
 } from "@/lib/icons";
+import { parseUserError } from "@/lib/errors";
 
 const FORM_ID = "category-form";
 
@@ -88,7 +89,7 @@ export default function CategoriesPage() {
       }
       setOpen(false);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Something went wrong");
+      setError(parseUserError(err, "We couldn't save this category. Please try again."));
     }
   };
 
@@ -178,7 +179,13 @@ export default function CategoriesPage() {
               </FormField>
             </FormSection>
 
-            {error && <FormError message={error} />}
+            {error && (
+              <FormError
+                title="Couldn't save category"
+                message={error}
+                onDismiss={() => setError(null)}
+              />
+            )}
           </FormBody>
         </form>
       </Modal>

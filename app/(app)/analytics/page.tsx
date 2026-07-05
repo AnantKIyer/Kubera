@@ -111,6 +111,7 @@ export default function AnalyticsPage() {
                 data={stats.expensesByCategory}
                 centerLabel="Spent"
                 centerValue={formatCurrency(stats.totalExpenses)}
+                layout="split"
               />
             )}
           </CardContent>
@@ -130,6 +131,7 @@ export default function AnalyticsPage() {
                 data={stats.incomeByCategory}
                 centerLabel="Earned"
                 centerValue={formatCurrency(stats.totalIncome)}
+                layout="split"
               />
             )}
           </CardContent>

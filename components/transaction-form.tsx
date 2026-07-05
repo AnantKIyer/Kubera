@@ -41,6 +41,7 @@ import {
 } from "@/components/loan-details-fields";
 import { analyzeEmiPayment, calculateEmi, resolveLoanTerms } from "@/lib/emi";
 import { formatCurrency, formatDate, toISODate } from "@/lib/format";
+import { parseUserError } from "@/lib/errors";
 import { getCategoryIcon } from "@/lib/icons";
 import {
   addBillingPeriod,
@@ -364,7 +365,7 @@ export function TransactionForm({ open, onClose, initialType, editing }: Props) 
       }
       onClose();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Something went wrong");
+      setError(parseUserError(err, "We couldn't save this transaction. Please try again."));
     } finally {
       setSaving(false);
     }
@@ -696,7 +697,13 @@ export function TransactionForm({ open, onClose, initialType, editing }: Props) 
               </FormField>
             </FormSection>
 
-            {error && <FormError message={error} />}
+            {error && (
+              <FormError
+                title="Couldn't save transaction"
+                message={error}
+                onDismiss={() => setError(null)}
+              />
+            )}
           </FormBody>
         </form>
         )}
