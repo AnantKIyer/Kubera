@@ -16,7 +16,6 @@ import {
   FormRow,
   FormSection,
   Input,
-  MoneyInput,
   SegmentedField,
   Select,
   Textarea,
@@ -50,6 +49,11 @@ import {
   type BillingCycle,
 } from "@/lib/subscription-dates";
 import { Button } from "@/components/ui/button";
+import {
+  CurrencyMoneyInput,
+  getConvertedAmount,
+} from "@/components/currency-money-input";
+import { BASE_CURRENCY, isBaseCurrency } from "@/lib/currency";
 
 const FORM_ID = "transaction-form";
 
@@ -60,6 +64,9 @@ export interface EditableTransaction {
   _id: Id<"transactions">;
   type: "income" | "expense";
   amount: number;
+  originalAmount?: number;
+  originalCurrency?: string;
+  exchangeRate?: number;
   description?: string;
   categoryId?: Id<"categories">;
   accountId?: Id<"accounts">;
@@ -89,6 +96,8 @@ export function TransactionForm({ open, onClose, initialType, editing }: Props) 
   const [newEmiLoanDetails, setNewEmiLoanDetails] = useState<LoanDetailsValues>(emptyLoanDetails());
   const [emiSuccess, setEmiSuccess] = useState<{ message: string; extraAmount: number } | null>(null);
   const [amount, setAmount] = useState("");
+  const [currency, setCurrency] = useState(BASE_CURRENCY);
+  const [exchangeRate, setExchangeRate] = useState<number | null>(null);
   const [description, setDescription] = useState("");
   const [categoryId, setCategoryId] = useState<string>("");
   const [accountId, setAccountId] = useState<string>("");
@@ -120,9 +129,19 @@ export function TransactionForm({ open, onClose, initialType, editing }: Props) 
     setNewEmiName("");
     setNewEmiLender("");
     setNewEmiLoanDetails(emptyLoanDetails());
+    setCurrency(BASE_CURRENCY);
+    setExchangeRate(null);
     if (editing) {
       setType(editing.type);
-      setAmount(String(editing.amount));
+      if (editing.originalCurrency && editing.originalAmount != null) {
+        setCurrency(editing.originalCurrency);
+        setAmount(String(editing.originalAmount));
+        setExchangeRate(editing.exchangeRate ?? null);
+      } else {
+        setCurrency(BASE_CURRENCY);
+        setAmount(String(editing.amount));
+        setExchangeRate(null);
+      }
       setDescription(editing.description ?? "");
       setCategoryId(editing.categoryId ?? "");
       setAccountId(editing.accountId ?? "");
@@ -130,12 +149,25 @@ export function TransactionForm({ open, onClose, initialType, editing }: Props) 
     } else {
       setType(initialType ?? "expense");
       setAmount("");
+      setCurrency(BASE_CURRENCY);
+      setExchangeRate(null);
       setDescription("");
       setCategoryId("");
       setAccountId("");
       setDate(toISODate(new Date()));
     }
   }, [open, editing, initialType]);
+
+  useEffect(() => {
+    if (isLinkedExpense) {
+      setCurrency(BASE_CURRENCY);
+      setExchangeRate(null);
+    }
+  }, [isLinkedExpense]);
+
+  const handleExchangeRateChange = (rate: number | null) => {
+    setExchangeRate(rate);
+  };
 
   useEffect(() => {
     if (type === "income") {
@@ -275,6 +307,17 @@ export function TransactionForm({ open, onClose, initialType, editing }: Props) 
       return;
     }
 
+    const isForeign = !isBaseCurrency(currency) && !isLinkedExpense;
+    const baseAmount = getConvertedAmount(amount, currency, exchangeRate);
+    if (baseAmount == null || baseAmount <= 0) {
+      setError(isForeign ? "Enter a valid amount and wait for the exchange rate" : "Enter an amount greater than 0");
+      return;
+    }
+    if (isForeign && !exchangeRate) {
+      setError("Exchange rate is required for foreign currency transactions");
+      return;
+    }
+
     if (isSubscriptionExpense) {
       if (subscriptionMode === "existing" && !selectedSub) {
         setError("Choose a subscription");
@@ -301,11 +344,24 @@ export function TransactionForm({ open, onClose, initialType, editing }: Props) 
 
     setSaving(true);
     try {
+      const currencyPayload = isForeign
+        ? {
+            originalAmount: parsed,
+            originalCurrency: currency,
+            exchangeRate: exchangeRate!,
+          }
+        : {
+            originalAmount: null,
+            originalCurrency: null,
+            exchangeRate: null,
+          };
+
       if (editing) {
         await update({
           id: editing._id,
           type,
-          amount: parsed,
+          amount: baseAmount,
+          ...currencyPayload,
           description: description.trim() || null,
           categoryId: (categoryId as Id<"categories">) || null,
           accountId: (accountId as Id<"accounts">) || null,
@@ -314,7 +370,8 @@ export function TransactionForm({ open, onClose, initialType, editing }: Props) 
       } else {
         const result = await create({
           type,
-          amount: parsed,
+          amount: baseAmount,
+          ...currencyPayload,
           description: description.trim() || undefined,
           categoryId: (categoryId as Id<"categories">) || undefined,
           accountId: (accountId as Id<"accounts">) || undefined,
@@ -636,11 +693,17 @@ export function TransactionForm({ open, onClose, initialType, editing }: Props) 
               />
             )}
 
-            <MoneyInput
+            <CurrencyMoneyInput
               value={amount}
               onChange={setAmount}
+              currency={currency}
+              onCurrencyChange={setCurrency}
+              exchangeRate={exchangeRate}
+              onExchangeRateChange={handleExchangeRateChange}
+              transactionDate={date}
               autoFocus={!isEditing}
               required
+              forceBaseCurrency={isLinkedExpense}
             />
 
             <FormSection title="Details">

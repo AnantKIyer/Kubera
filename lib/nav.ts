@@ -26,3 +26,9 @@ export const NAV_ITEMS: NavItem[] = [
   { href: "/budgets", label: "Budgets", icon: Target },
   { href: "/categories", label: "Categories", icon: Tags },
 ];
+
+/** Primary tabs shown in the mobile bottom bar. */
+export const MOBILE_PRIMARY_NAV = NAV_ITEMS.slice(0, 5);
+
+/** Secondary routes opened from the mobile “More” menu. */
+export const MOBILE_MORE_NAV = NAV_ITEMS.slice(5);

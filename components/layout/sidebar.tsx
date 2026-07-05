@@ -2,17 +2,27 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { NAV_ITEMS } from "@/lib/nav";
+import { useState } from "react";
+import { MoreHorizontal } from "lucide-react";
+import { MOBILE_MORE_NAV, MOBILE_PRIMARY_NAV, NAV_ITEMS } from "@/lib/nav";
 import { cn } from "@/lib/utils";
 import { Logo } from "./logo";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { UserMenu } from "./user-menu";
+import { MobileMoreSheet } from "./mobile-more-sheet";
 
 function isActive(pathname: string, href: string) {
   if (href === "/accounts") {
     return pathname.startsWith("/accounts") || pathname.startsWith("/emis");
   }
   return href === "/" ? pathname === "/" : pathname.startsWith(href);
+}
+
+function isMoreActive(pathname: string) {
+  return (
+    pathname === "/settings" ||
+    MOBILE_MORE_NAV.some((item) => isActive(pathname, item.href))
+  );
 }
 
 export function Sidebar() {
@@ -59,39 +69,59 @@ export function Sidebar() {
 
 export function MobileNav() {
   const pathname = usePathname();
-  const primary = NAV_ITEMS.slice(0, 5);
+  const [moreOpen, setMoreOpen] = useState(false);
+  const moreActive = isMoreActive(pathname);
+
   return (
-    <nav className="fixed inset-x-0 bottom-0 z-30 border-t border-border bg-card/90 backdrop-blur-xl lg:hidden">
-      <div className="flex overflow-x-auto no-scrollbar">
-        {primary.map((item) => {
-          const active = isActive(pathname, item.href);
-          const Icon = item.icon;
-          return (
-            <Link
-              key={item.href}
-              href={item.href}
-              className={cn(
-                "flex min-w-[20%] flex-1 flex-col items-center gap-1 py-2.5 text-[10px] font-medium transition-colors",
-                active ? "text-primary" : "text-muted-foreground",
-              )}
-            >
-              <Icon size={20} />
-              {item.label}
-            </Link>
-          );
-        })}
-      </div>
-    </nav>
+    <>
+      <nav className="fixed inset-x-0 bottom-0 z-30 border-t border-border bg-card/90 pb-safe backdrop-blur-xl lg:hidden">
+        <div className="flex">
+          {MOBILE_PRIMARY_NAV.map((item) => {
+            const active = isActive(pathname, item.href);
+            const Icon = item.icon;
+            return (
+              <Link
+                key={item.href}
+                href={item.href}
+                className={cn(
+                  "flex min-w-0 flex-1 flex-col items-center gap-0.5 px-1 py-2 text-[10px] font-medium transition-colors",
+                  active ? "text-primary" : "text-muted-foreground",
+                )}
+              >
+                <Icon size={20} />
+                <span className="truncate">{item.label}</span>
+              </Link>
+            );
+          })}
+          <button
+            type="button"
+            onClick={() => setMoreOpen(true)}
+            className={cn(
+              "flex min-w-0 flex-1 flex-col items-center gap-0.5 px-1 py-2 text-[10px] font-medium transition-colors",
+              moreActive ? "text-primary" : "text-muted-foreground",
+            )}
+            aria-label="More navigation"
+            aria-expanded={moreOpen}
+          >
+            <MoreHorizontal size={20} />
+            <span>More</span>
+          </button>
+        </div>
+      </nav>
+      <MobileMoreSheet open={moreOpen} onClose={() => setMoreOpen(false)} />
+    </>
   );
 }
 
 export function MobileHeader() {
   return (
-    <header className="sticky top-0 z-20 flex h-14 items-center justify-between border-b border-border bg-card/80 px-4 backdrop-blur-xl lg:hidden">
-      <Logo />
-      <div className="flex items-center gap-2">
-        <ThemeToggle />
-        <UserMenu compact />
+    <header className="sticky top-0 z-20 border-b border-border bg-card/80 pt-safe backdrop-blur-xl lg:hidden">
+      <div className="flex h-14 items-center justify-between px-4">
+        <Logo />
+        <div className="flex items-center gap-2">
+          <ThemeToggle />
+          <UserMenu compact />
+        </div>
       </div>
     </header>
   );

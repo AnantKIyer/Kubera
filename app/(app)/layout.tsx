@@ -12,7 +12,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         <Sidebar />
         <MobileHeader />
         <main className="lg:pl-64">
-          <div className="mx-auto max-w-6xl px-4 pb-24 pt-6 sm:px-6 lg:px-10 lg:pb-12 lg:pt-8">
+          <div className="mx-auto max-w-6xl px-4 pb-mobile-nav pt-6 sm:px-6 lg:px-10 lg:pb-12 lg:pt-8">
             {children}
           </div>
         </main>

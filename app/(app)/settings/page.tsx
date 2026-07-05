@@ -14,6 +14,7 @@ import { FormError, FormField, Input } from "@/components/ui/form";
 import { Skeleton } from "@/components/ui/misc";
 import { getUserDisplayName } from "@/lib/user-display";
 import { parseUserError } from "@/lib/errors";
+import { InstallAppCard } from "@/components/pwa/install-app-card";
 
 export default function SettingsPage() {
   const user = useQuery(api.users.me);
@@ -63,6 +64,8 @@ export default function SettingsPage() {
       />
 
       <div className="grid max-w-2xl gap-6">
+        <InstallAppCard />
+
         <Card>
           <CardHeader>
             <CardTitle>Profile photo</CardTitle>

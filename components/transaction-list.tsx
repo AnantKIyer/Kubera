@@ -6,6 +6,7 @@ import { Id } from "@/convex/_generated/dataModel";
 import { Pencil, Trash2 } from "lucide-react";
 import { getCategoryIcon } from "@/lib/icons";
 import { formatDayLabel, formatSigned } from "@/lib/format";
+import { formatInCurrency } from "@/lib/currency";
 import { cn } from "@/lib/utils";
 import { EditableTransaction } from "./transaction-form";
 
@@ -13,6 +14,9 @@ export interface TxItem {
   _id: Id<"transactions">;
   type: "income" | "expense";
   amount: number;
+  originalAmount?: number;
+  originalCurrency?: string;
+  exchangeRate?: number;
   description?: string;
   categoryId?: Id<"categories">;
   accountId?: Id<"accounts">;
@@ -36,6 +40,8 @@ function Row({
   const remove = useMutation(api.transactions.remove);
   const Icon = getCategoryIcon(tx.categoryIcon);
   const color = tx.categoryColor ?? "#94a3b8";
+  const hasForeign =
+    tx.originalCurrency && tx.originalAmount != null && tx.originalCurrency !== "INR";
 
   return (
     <div className="group flex items-center gap-3 rounded-xl px-3 py-2.5 transition-colors hover:bg-muted/60">
@@ -71,6 +77,11 @@ function Row({
         >
           {formatSigned(tx.amount, tx.type)}
         </p>
+        {hasForeign && (
+          <p className="text-[11px] tabular-nums text-muted-foreground">
+            {formatInCurrency(tx.originalAmount!, tx.originalCurrency!)}
+          </p>
+        )}
       </div>
 
       <div className="flex items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100">
@@ -81,6 +92,9 @@ function Row({
                 _id: tx._id,
                 type: tx.type,
                 amount: tx.amount,
+                originalAmount: tx.originalAmount,
+                originalCurrency: tx.originalCurrency,
+                exchangeRate: tx.exchangeRate,
                 description: tx.description,
                 categoryId: tx.categoryId,
                 accountId: tx.accountId,
