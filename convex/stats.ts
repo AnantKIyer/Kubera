@@ -8,6 +8,7 @@ import {
   creditUtilizationPct,
   creditUtilized,
 } from "./lib/credit";
+import { decryptAccounts } from "./lib/sensitiveFields";
 
 function portfolioValue(investedAmount: number, currentValue?: number | null): number {
   return currentValue ?? investedAmount;
@@ -208,10 +209,12 @@ export const insights = query({
         .collect()
       ).map((c) => [c._id, c]),
     );
-    const accounts = await ctx.db
-      .query("accounts")
-      .withIndex("by_user", (q) => q.eq("userId", userId))
-      .collect();
+    const accounts = await decryptAccounts(
+      await ctx.db
+        .query("accounts")
+        .withIndex("by_user", (q) => q.eq("userId", userId))
+        .collect(),
+    );
 
     const cur = sumInMonth(all, currentMonth);
     const prev = sumInMonth(all, lastMonth);

@@ -12,6 +12,11 @@ import {
   inferPastLoanSchedule,
   resolveLoanTerms,
 } from "./lib/emi";
+import {
+  decryptAccounts,
+  decryptEmis,
+  encryptEmiFields,
+} from "./lib/sensitiveFields";
 
 function enrichEmi(
   emi: Doc<"emis">,
@@ -63,11 +68,12 @@ export const list = query({
       ).map((c) => [c._id, c]),
     );
     const accounts = new Map(
-      (await ctx.db
-        .query("accounts")
-        .withIndex("by_user", (q) => q.eq("userId", userId))
-        .collect()
-      ).map((a) => [a._id, a]),
+      (await decryptAccounts(
+        await ctx.db
+          .query("accounts")
+          .withIndex("by_user", (q) => q.eq("userId", userId))
+          .collect(),
+      )).map((a) => [a._id, a]),
     );
 
     const transactions = await ctx.db
@@ -82,7 +88,9 @@ export const list = query({
       }
     }
 
-    return rows
+    const decryptedRows = await decryptEmis(rows);
+
+    return decryptedRows
       .map((e) => {
         const category = e.categoryId ? categories.get(e.categoryId) : undefined;
         const account = e.accountId ? accounts.get(e.accountId) : undefined;
@@ -164,12 +172,18 @@ export const create = mutation({
 
     const isClosed = past?.isActive === false;
 
+    const sensitive = await encryptEmiFields({
+      name: args.name.trim(),
+      lender: args.lender?.trim() || null,
+      notes: args.notes?.trim() || null,
+    });
+
     return await ctx.db.insert("emis", {
       userId,
-      name: args.name.trim(),
+      name: sensitive.name!,
       amount: resolved.expectedEmi,
       expectedEmiAmount: resolved.expectedEmi,
-      lender: args.lender?.trim() || undefined,
+      lender: sensitive.lender,
       categoryId: args.categoryId,
       accountId: args.accountId,
       nextDebitDate,
@@ -181,7 +195,7 @@ export const create = mutation({
       loanDate: args.loanDate,
       extraPaidTotal: 0,
       isActive: isClosed ? false : true,
-      notes: args.notes?.trim() || undefined,
+      notes: sensitive.notes,
     });
   },
 });
@@ -211,12 +225,18 @@ export const update = mutation({
 
     const { id, ...rest } = args;
     const patch: Record<string, unknown> = {};
-    if (rest.name !== undefined) patch.name = rest.name.trim();
+    if (rest.name !== undefined) {
+      const sensitive = await encryptEmiFields({ name: rest.name.trim() });
+      patch.name = sensitive.name;
+    }
     if (rest.amount !== undefined) {
       if (!(rest.amount > 0)) throw new Error("EMI amount must be greater than 0");
       patch.amount = rest.amount;
     }
-    if (rest.lender !== undefined) patch.lender = rest.lender?.trim() || undefined;
+    if (rest.lender !== undefined) {
+      const sensitive = await encryptEmiFields({ lender: rest.lender?.trim() || null });
+      patch.lender = sensitive.lender;
+    }
     if (rest.categoryId !== undefined) patch.categoryId = rest.categoryId ?? undefined;
     if (rest.accountId !== undefined) patch.accountId = rest.accountId ?? undefined;
     if (rest.nextDebitDate !== undefined) {
@@ -253,7 +273,10 @@ export const update = mutation({
     }
     if (rest.paidInstallments !== undefined) patch.paidInstallments = rest.paidInstallments;
     if (rest.isActive !== undefined) patch.isActive = rest.isActive;
-    if (rest.notes !== undefined) patch.notes = rest.notes?.trim() || undefined;
+    if (rest.notes !== undefined) {
+      const sensitive = await encryptEmiFields({ notes: rest.notes?.trim() || null });
+      patch.notes = sensitive.notes;
+    }
     if (rest.principalAmount !== undefined) {
       patch.principalAmount = rest.principalAmount ?? undefined;
     }

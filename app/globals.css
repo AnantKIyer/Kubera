@@ -4,61 +4,61 @@
 
 @layer base {
   :root {
-    /* Warm stone & sage — calm light theme */
-    --background: 40 33% 97%;
-    --foreground: 200 10% 25%;
+    /* Warm crumpled paper base */
+    --background: 38 32% 90%;
+    --foreground: 200 18% 16%;
 
-    --card: 40 40% 99%;
-    --card-foreground: 200 10% 25%;
+    --card: 40 34% 95%;
+    --card-foreground: 200 18% 16%;
 
-    --muted: 40 20% 94%;
-    --muted-foreground: 200 8% 48%;
+    --muted: 38 20% 88%;
+    --muted-foreground: 200 12% 38%;
 
-    --primary: 152 22% 42%;
+    --primary: 152 38% 34%;
     --primary-foreground: 40 40% 98%;
 
-    --secondary: 40 18% 93%;
-    --secondary-foreground: 200 10% 30%;
+    --secondary: 38 22% 86%;
+    --secondary-foreground: 200 15% 22%;
 
-    --accent: 152 18% 92%;
-    --accent-foreground: 152 22% 32%;
+    --accent: 152 28% 88%;
+    --accent-foreground: 152 38% 26%;
 
-    --border: 40 14% 90%;
-    --input: 40 14% 90%;
-    --ring: 152 22% 42%;
+    --border: 38 18% 78%;
+    --input: 38 18% 78%;
+    --ring: 152 38% 34%;
 
-    --income: 152 24% 40%;
-    --expense: 12 28% 52%;
+    --income: 152 42% 30%;
+    --expense: 8 58% 44%;
 
     --radius: 0.9rem;
   }
 
   .dark {
-    /* Warm charcoal & muted sage — gentle dark */
-    --background: 200 12% 10%;
-    --foreground: 40 15% 92%;
+    /* Warm charcoal & forest sage — richer dark */
+    --background: 200 14% 9%;
+    --foreground: 40 18% 94%;
 
-    --card: 200 10% 13%;
-    --card-foreground: 40 15% 92%;
+    --card: 200 12% 12%;
+    --card-foreground: 40 18% 94%;
 
-    --muted: 200 8% 17%;
-    --muted-foreground: 40 8% 62%;
+    --muted: 200 10% 16%;
+    --muted-foreground: 40 10% 68%;
 
-    --primary: 152 20% 55%;
-    --primary-foreground: 200 12% 10%;
+    --primary: 152 32% 50%;
+    --primary-foreground: 200 14% 9%;
 
-    --secondary: 200 8% 16%;
+    --secondary: 200 10% 15%;
     --secondary-foreground: 40 15% 90%;
 
-    --accent: 152 12% 18%;
-    --accent-foreground: 152 20% 72%;
+    --accent: 152 18% 16%;
+    --accent-foreground: 152 28% 74%;
 
-    --border: 200 8% 20%;
-    --input: 200 8% 20%;
-    --ring: 152 20% 55%;
+    --border: 200 10% 22%;
+    --input: 200 10% 22%;
+    --ring: 152 32% 50%;
 
-    --income: 152 22% 58%;
-    --expense: 12 32% 62%;
+    --income: 152 36% 54%;
+    --expense: 10 48% 58%;
   }
 }
 
@@ -77,9 +77,10 @@
   .paper-surface {
     position: relative;
     min-height: 100%;
+    background-color: hsl(38 32% 90%);
   }
 
-  /* Warm gradient + soft crease shadows + crumpled paper grain */
+  /* Crumpled paper: crease shadows + uneven lighting */
   .paper-surface::before,
   .paper-surface::after {
     content: "";
@@ -90,51 +91,118 @@
   }
 
   .paper-surface::before {
-    background-color: hsl(var(--background));
+    background-color: hsl(38 32% 90%);
     background-image:
-      radial-gradient(ellipse 120% 80% at 18% 35%, hsl(var(--foreground) / 0.045), transparent 52%),
-      radial-gradient(ellipse 90% 70% at 88% 12%, hsl(var(--foreground) / 0.035), transparent 48%),
-      radial-gradient(ellipse 100% 85% at 72% 88%, hsl(var(--foreground) / 0.04), transparent 54%),
-      radial-gradient(ellipse 75% 65% at 8% 92%, hsl(var(--foreground) / 0.03), transparent 46%),
-      radial-gradient(ellipse 55% 45% at 42% 58%, hsl(var(--foreground) / 0.028), transparent 42%),
+      /* fold creases — dark valley + bright ridge */
       linear-gradient(
-        165deg,
-        hsl(var(--background)) 0%,
-        hsl(152 18% 95%) 45%,
-        hsl(40 30% 96%) 100%
+        112deg,
+        transparent 38%,
+        hsl(28 22% 42% / 0.07) 47%,
+        hsl(42 38% 97% / 0.14) 50%,
+        hsl(28 20% 45% / 0.05) 53%,
+        transparent 62%
+      ),
+      linear-gradient(
+        28deg,
+        transparent 30%,
+        hsl(30 18% 40% / 0.06) 44%,
+        hsl(40 35% 96% / 0.12) 50%,
+        hsl(32 16% 48% / 0.04) 56%,
+        transparent 68%
+      ),
+      linear-gradient(
+        -18deg,
+        transparent 55%,
+        hsl(28 20% 44% / 0.055) 49.5%,
+        hsl(38 32% 94% / 0.1) 50.5%,
+        transparent 72%
+      ),
+      linear-gradient(
+        78deg,
+        transparent 62%,
+        hsl(30 15% 50% / 0.04) 48%,
+        transparent 78%
+      ),
+      /* crumple bumps — soft hills and valleys */
+      radial-gradient(ellipse 55% 40% at 22% 28%, hsl(42 40% 98% / 0.55), transparent 68%),
+      radial-gradient(ellipse 45% 35% at 68% 18%, hsl(30 22% 72% / 0.14), transparent 62%),
+      radial-gradient(ellipse 60% 50% at 82% 72%, hsl(28 20% 65% / 0.16), transparent 65%),
+      radial-gradient(ellipse 50% 45% at 12% 78%, hsl(32 18% 70% / 0.12), transparent 60%),
+      radial-gradient(ellipse 70% 55% at 48% 52%, hsl(30 16% 78% / 0.1), transparent 72%),
+      radial-gradient(ellipse 40% 30% at 55% 22%, hsl(40 35% 96% / 0.35), transparent 58%),
+      /* warm paper base */
+      linear-gradient(
+        168deg,
+        hsl(40 34% 93%) 0%,
+        hsl(36 28% 88%) 42%,
+        hsl(34 26% 86%) 100%
       );
+    background-size: 100% 100%;
+    background-attachment: fixed;
+  }
+
+  .dark .paper-surface {
+    background-color: hsl(200 14% 9%);
   }
 
   .dark .paper-surface::before {
+    background-color: hsl(200 14% 9%);
     background-image:
-      radial-gradient(ellipse 120% 80% at 18% 35%, hsl(var(--foreground) / 0.06), transparent 52%),
-      radial-gradient(ellipse 90% 70% at 88% 12%, hsl(var(--foreground) / 0.05), transparent 48%),
-      radial-gradient(ellipse 100% 85% at 72% 88%, hsl(var(--foreground) / 0.055), transparent 54%),
-      radial-gradient(ellipse 75% 65% at 8% 92%, hsl(var(--foreground) / 0.04), transparent 46%),
-      radial-gradient(ellipse 55% 45% at 42% 58%, hsl(var(--foreground) / 0.035), transparent 42%),
       linear-gradient(
-        165deg,
-        hsl(var(--background)) 0%,
-        hsl(200 10% 12%) 50%,
-        hsl(152 10% 11%) 100%
+        112deg,
+        transparent 38%,
+        hsl(200 8% 4% / 0.35) 47%,
+        hsl(40 10% 22% / 0.12) 50%,
+        hsl(200 8% 6% / 0.25) 53%,
+        transparent 62%
+      ),
+      linear-gradient(
+        28deg,
+        transparent 30%,
+        hsl(200 10% 5% / 0.3) 44%,
+        hsl(40 8% 20% / 0.1) 50%,
+        hsl(200 8% 8% / 0.22) 56%,
+        transparent 68%
+      ),
+      linear-gradient(
+        -18deg,
+        transparent 55%,
+        hsl(200 8% 6% / 0.28) 49.5%,
+        hsl(40 6% 18% / 0.08) 50.5%,
+        transparent 72%
+      ),
+      radial-gradient(ellipse 55% 40% at 22% 28%, hsl(40 8% 18% / 0.15), transparent 68%),
+      radial-gradient(ellipse 45% 35% at 68% 18%, hsl(200 12% 6% / 0.4), transparent 62%),
+      radial-gradient(ellipse 60% 50% at 82% 72%, hsl(200 10% 5% / 0.45), transparent 65%),
+      radial-gradient(ellipse 50% 45% at 12% 78%, hsl(200 12% 7% / 0.35), transparent 60%),
+      radial-gradient(ellipse 70% 55% at 48% 52%, hsl(200 8% 8% / 0.3), transparent 72%),
+      linear-gradient(
+        168deg,
+        hsl(200 14% 10%) 0%,
+        hsl(200 12% 8%) 50%,
+        hsl(200 10% 7%) 100%
       );
   }
 
+  /* Fine fiber grain + large wrinkle turbulence */
   .paper-surface::after {
-    opacity: 0.42;
+    opacity: 0.52;
     mix-blend-mode: multiply;
     background-image:
-      url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='128' height='128'%3E%3Cfilter id='g'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.72' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='128' height='128' filter='url(%23g)' opacity='0.45'/%3E%3C/svg%3E"),
-      url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='420' height='420'%3E%3Cfilter id='p'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.022' numOctaves='4' seed='7' stitchTiles='stitch'/%3E%3CfeColorMatrix type='matrix' values='0 0 0 0 0.48 0 0 0 0 0.44 0 0 0 0 0.4 0 0 0 0.16 0'/%3E%3C/filter%3E%3Crect width='420' height='420' filter='url(%23p)'/%3E%3C/svg%3E");
-    background-size: 160px 160px, 420px 420px;
+      url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='f'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='180' height='180' filter='url(%23f)' opacity='0.55'/%3E%3C/svg%3E"),
+      url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='512' height='512'%3E%3Cfilter id='w'%3E%3CfeTurbulence type='turbulence' baseFrequency='0.014' numOctaves='5' seed='11' stitchTiles='stitch'/%3E%3CfeColorMatrix type='matrix' values='0 0 0 0 0.42 0 0 0 0 0.38 0 0 0 0 0.34 0 0 0 0.22 0'/%3E%3C/filter%3E%3Crect width='512' height='512' filter='url(%23w)'/%3E%3C/svg%3E"),
+      url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='320' height='320'%3E%3Cfilter id='c'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.035' numOctaves='3' seed='3' stitchTiles='stitch'/%3E%3CfeColorMatrix type='matrix' values='0 0 0 0 0.35 0 0 0 0 0.32 0 0 0 0 0.28 0 0 0 0.18 0'/%3E%3C/filter%3E%3Crect width='320' height='320' filter='url(%23c)'/%3E%3C/svg%3E");
+    background-size: 140px 140px, 480px 480px, 360px 360px;
+    background-attachment: fixed;
   }
 
   .dark .paper-surface::after {
-    opacity: 0.28;
+    opacity: 0.38;
     mix-blend-mode: soft-light;
     background-image:
-      url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='128' height='128'%3E%3Cfilter id='g'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.72' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='128' height='128' filter='url(%23g)' opacity='0.55'/%3E%3C/svg%3E"),
-      url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='420' height='420'%3E%3Cfilter id='p'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.022' numOctaves='4' seed='7' stitchTiles='stitch'/%3E%3CfeColorMatrix type='matrix' values='0 0 0 0 0.15 0 0 0 0 0.14 0 0 0 0 0.13 0 0 0 0.2 0'/%3E%3C/filter%3E%3Crect width='420' height='420' filter='url(%23p)'/%3E%3C/svg%3E");
+      url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='f'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='180' height='180' filter='url(%23f)' opacity='0.65'/%3E%3C/svg%3E"),
+      url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='512' height='512'%3E%3Cfilter id='w'%3E%3CfeTurbulence type='turbulence' baseFrequency='0.014' numOctaves='5' seed='11' stitchTiles='stitch'/%3E%3CfeColorMatrix type='matrix' values='0 0 0 0 0.08 0 0 0 0 0.08 0 0 0 0 0.09 0 0 0 0.35 0'/%3E%3C/filter%3E%3Crect width='512' height='512' filter='url(%23w)'/%3E%3C/svg%3E"),
+      url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='320' height='320'%3E%3Cfilter id='c'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.035' numOctaves='3' seed='3' stitchTiles='stitch'/%3E%3CfeColorMatrix type='matrix' values='0 0 0 0 0.1 0 0 0 0 0.1 0 0 0 0 0.11 0 0 0 0.28 0'/%3E%3C/filter%3E%3Crect width='320' height='320' filter='url(%23c)'/%3E%3C/svg%3E");
   }
 }
 
@@ -145,10 +213,10 @@
 
   .bg-calm-gradient {
     background: linear-gradient(
-      165deg,
-      hsl(var(--background)) 0%,
-      hsl(152 18% 95%) 45%,
-      hsl(40 30% 96%) 100%
+      168deg,
+      hsl(40 34% 93%) 0%,
+      hsl(36 28% 88%) 42%,
+      hsl(34 26% 86%) 100%
     );
   }
 
@@ -163,8 +231,8 @@
 
   .bg-aurora {
     background-image:
-      radial-gradient(70% 50% at 100% 0%, hsl(var(--primary) / 0.06), transparent 70%),
-      radial-gradient(50% 40% at 0% 100%, hsl(var(--accent) / 0.5), transparent 70%);
+      radial-gradient(70% 50% at 100% 0%, hsl(var(--primary) / 0.12), transparent 70%),
+      radial-gradient(50% 40% at 0% 100%, hsl(var(--accent) / 0.65), transparent 70%);
   }
 
   .glass {

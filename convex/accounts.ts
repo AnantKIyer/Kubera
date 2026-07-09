@@ -8,6 +8,7 @@ import {
   creditUtilizationPct,
   creditUtilized,
 } from "./lib/credit";
+import { decryptAccounts, encryptAccountFields } from "./lib/sensitiveFields";
 
 function currentMonthKey(): string {
   const now = new Date();
@@ -149,11 +150,12 @@ export const list = query({
 
     if (args.activeOnly) rows = rows.filter((a) => a.isActive !== false);
 
+    const decryptedRows = await decryptAccounts(rows);
     const banksById = new Map(
-      rows.filter((a) => a.type === "bank").map((b) => [b._id, b]),
+      decryptedRows.filter((a) => a.type === "bank").map((b) => [b._id, b]),
     );
 
-    return rows
+    return decryptedRows
       .map((acc) => enrichAccount(acc, banksById))
       .sort((a, b) => a.name.localeCompare(b.name));
   },
@@ -182,8 +184,9 @@ export const listWithUsage = query({
 
     if (args.activeOnly) rows = rows.filter((a) => a.isActive !== false);
 
+    const decryptedRows = await decryptAccounts(rows);
     const banksById = new Map(
-      rows.filter((a) => a.type === "bank").map((b) => [b._id, b]),
+      decryptedRows.filter((a) => a.type === "bank").map((b) => [b._id, b]),
     );
 
     const transactions = await ctx.db
@@ -191,7 +194,7 @@ export const listWithUsage = query({
       .withIndex("by_user", (q) => q.eq("userId", userId))
       .collect();
 
-    return rows
+    return decryptedRows
       .map((acc) => ({
         ...enrichAccount(acc, banksById),
         usage: computeUsage(
@@ -253,12 +256,18 @@ export const create = mutation({
       initialUtilized: args.initialUtilized,
     });
 
+    const sensitive = await encryptAccountFields({
+      name,
+      institution: args.institution?.trim() || null,
+      lastFour: args.lastFour || null,
+    });
+
     return await ctx.db.insert("accounts", {
       userId,
-      name,
+      name: sensitive.name!,
       type: args.type,
-      institution: args.institution?.trim() || undefined,
-      lastFour: args.lastFour || undefined,
+      institution: sensitive.institution,
+      lastFour: sensitive.lastFour,
       color: args.color,
       creditLimit: normalized.creditLimit,
       currentBalance: normalized.currentBalance,
@@ -292,16 +301,23 @@ export const update = mutation({
     const { id, ...rest } = args;
     const patch: Record<string, unknown> = {};
 
-    if (rest.name !== undefined) patch.name = rest.name.trim();
+    if (rest.name !== undefined) {
+      const sensitive = await encryptAccountFields({ name: rest.name.trim() });
+      patch.name = sensitive.name;
+    }
     if (rest.type !== undefined) patch.type = rest.type;
     if (rest.institution !== undefined) {
-      patch.institution = rest.institution?.trim() || undefined;
+      const sensitive = await encryptAccountFields({
+        institution: rest.institution?.trim() || null,
+      });
+      patch.institution = sensitive.institution;
     }
     if (rest.lastFour !== undefined) {
       if (rest.lastFour && !/^\d{4}$/.test(rest.lastFour)) {
         throw new Error("Last four digits must be exactly 4 numbers");
       }
-      patch.lastFour = rest.lastFour || undefined;
+      const sensitive = await encryptAccountFields({ lastFour: rest.lastFour || null });
+      patch.lastFour = sensitive.lastFour;
     }
     if (rest.color !== undefined) patch.color = rest.color;
     if (rest.isActive !== undefined) patch.isActive = rest.isActive;

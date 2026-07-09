@@ -5,9 +5,9 @@ import { LucideIcon } from "lucide-react";
 type Tone = "income" | "expense" | "balance" | "neutral";
 
 const toneStyles: Record<Tone, { icon: string; ring: string }> = {
-  income: { icon: "bg-[hsl(var(--income))]/12 text-[hsl(var(--income))]", ring: "" },
-  expense: { icon: "bg-[hsl(var(--expense))]/12 text-[hsl(var(--expense))]", ring: "" },
-  balance: { icon: "bg-primary/12 text-primary", ring: "" },
+  income: { icon: "bg-[hsl(var(--income))]/18 text-[hsl(var(--income))]", ring: "" },
+  expense: { icon: "bg-[hsl(var(--expense))]/18 text-[hsl(var(--expense))]", ring: "" },
+  balance: { icon: "bg-primary/18 text-primary", ring: "" },
   neutral: { icon: "bg-muted text-muted-foreground", ring: "" },
 };
 

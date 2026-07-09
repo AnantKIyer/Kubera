@@ -6,6 +6,7 @@ import { requireUserId } from "./lib/user";
 import { addBillingPeriod } from "./lib/subscriptionDates";
 import { buildEmiPaymentPatch, clampInstallmentDate, getExtraPaymentMessage, inferPastLoanSchedule, resolveLoanTerms } from "./lib/emi";
 import { normalizeCurrencyFields } from "./lib/currency";
+import { decryptAccounts, decryptTransactions, encryptEmiFields, encryptSubscriptionFields, encryptTransactionFields } from "./lib/sensitiveFields";
 
 const currencyFields = {
   originalAmount: v.optional(v.union(v.number(), v.null())),
@@ -97,24 +98,31 @@ export const list = query({
       ).map((c) => [c._id, c]),
     );
     const accounts = new Map(
-      (await ctx.db
-        .query("accounts")
-        .withIndex("by_user", (q) => q.eq("userId", userId))
-        .collect()
-      ).map((a) => [a._id, a]),
+      (await decryptAccounts(
+        await ctx.db
+          .query("accounts")
+          .withIndex("by_user", (q) => q.eq("userId", userId))
+          .collect(),
+      )).map((a) => [a._id, a]),
     );
 
-    let enriched = rows.map((tx) => enrich(tx, categories, accounts));
+    let enriched: EnrichedTransaction[];
 
     if (args.search) {
       const term = args.search.toLowerCase();
-      enriched = enriched.filter(
-        (tx) =>
-          tx.description?.toLowerCase().includes(term) ||
-          tx.categoryName?.toLowerCase().includes(term) ||
-          tx.accountName?.toLowerCase().includes(term) ||
-          tx.amount.toString().includes(term),
-      );
+      const decryptedForSearch = await decryptTransactions(rows);
+      enriched = decryptedForSearch
+        .map((tx) => enrich(tx, categories, accounts))
+        .filter(
+          (tx) =>
+            tx.description?.toLowerCase().includes(term) ||
+            tx.categoryName?.toLowerCase().includes(term) ||
+            tx.accountName?.toLowerCase().includes(term) ||
+            tx.amount.toString().includes(term),
+        );
+    } else {
+      const decryptedRows = await decryptTransactions(rows);
+      enriched = decryptedRows.map((tx) => enrich(tx, categories, accounts));
     }
 
     if (args.limit) enriched = enriched.slice(0, args.limit);
@@ -163,6 +171,9 @@ export const create = mutation({
       originalCurrency: args.originalCurrency,
       exchangeRate: args.exchangeRate,
     });
+    const sensitive = await encryptTransactionFields({
+      description: args.description?.trim() || null,
+    });
 
     if (args.categoryId) {
       const category = await ctx.db.get(args.categoryId);
@@ -207,14 +218,18 @@ export const create = mutation({
 
         subscriptionId = await ctx.db.insert("subscriptions", {
           userId,
-          name,
+          name: (await encryptSubscriptionFields({ name })).name!,
           amount: currency.amount,
           billingCycle: link.billingCycle,
           categoryId: args.categoryId,
           accountId: args.accountId,
           nextRenewalDate: addBillingPeriod(args.date, link.billingCycle),
           isActive: true,
-          notes: args.description?.trim() || undefined,
+          notes: (
+            await encryptSubscriptionFields({
+              notes: args.description?.trim() || null,
+            })
+          ).notes,
         });
       }
     }
@@ -252,12 +267,18 @@ export const create = mutation({
           past?.nextDebitDate ?? addBillingPeriod(args.date, "monthly"),
         );
 
+        const emiSensitive = await encryptEmiFields({
+          name,
+          lender: link.lender?.trim() || null,
+          notes: args.description?.trim() || null,
+        });
+
         emiId = await ctx.db.insert("emis", {
           userId,
-          name,
+          name: emiSensitive.name!,
           amount: expectedEmi,
           expectedEmiAmount: expectedEmi,
-          lender: link.lender?.trim() || undefined,
+          lender: emiSensitive.lender,
           categoryId: args.categoryId,
           accountId: args.accountId,
           nextDebitDate: nextDebit,
@@ -269,7 +290,7 @@ export const create = mutation({
           loanDate: link.loanDate,
           extraPaidTotal: Math.max(0, Math.round((currency.amount - expectedEmi) * 100) / 100),
           isActive: tenure == null || paidInstallments < tenure,
-          notes: args.description?.trim() || undefined,
+          notes: emiSensitive.notes,
         });
 
         const extra = Math.max(0, Math.round((currency.amount - expectedEmi) * 100) / 100);
@@ -290,7 +311,7 @@ export const create = mutation({
       originalAmount: currency.originalAmount,
       originalCurrency: currency.originalCurrency,
       exchangeRate: currency.exchangeRate,
-      description: args.description?.trim() || undefined,
+      description: sensitive.description,
       categoryId: args.categoryId,
       accountId: args.accountId,
       subscriptionId,
@@ -351,7 +372,10 @@ export const update = mutation({
 
     if (args.date !== undefined) patch.date = args.date;
     if (args.description !== undefined) {
-      patch.description = args.description?.trim() || undefined;
+      const sensitive = await encryptTransactionFields({
+        description: args.description?.trim() || null,
+      });
+      patch.description = sensitive.description;
     }
     if (args.categoryId !== undefined) {
       const nextCategory = args.categoryId as Id<"categories"> | null;

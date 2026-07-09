@@ -183,4 +183,65 @@ export default defineSchema({
   })
     .index("by_user_month", ["userId", "month"])
     .index("by_user_category_month", ["userId", "categoryId", "month"]),
+
+  /** Shared expense groups — roommates, trips, households */
+  expenseGroups: defineTable({
+    name: v.string(),
+    description: v.optional(v.string()),
+    color: v.string(),
+    createdBy: v.id("users"),
+    /** 8-char uppercase alphanumeric join code (displayed as #CODE) */
+    shareId: v.optional(v.string()),
+  })
+    .index("by_creator", ["createdBy"])
+    .index("by_shareId", ["shareId"]),
+
+  expenseGroupMembers: defineTable({
+    groupId: v.id("expenseGroups"),
+    userId: v.id("users"),
+    role: v.union(v.literal("owner"), v.literal("member")),
+  })
+    .index("by_group", ["groupId"])
+    .index("by_user", ["userId"])
+    .index("by_group_user", ["groupId", "userId"]),
+
+  groupExpenses: defineTable({
+    groupId: v.id("expenseGroups"),
+    paidByUserId: v.id("users"),
+    amount: v.number(),
+    description: v.string(),
+    date: v.string(),
+    createdBy: v.id("users"),
+  })
+    .index("by_group", ["groupId"])
+    .index("by_group_date", ["groupId", "date"]),
+
+  /** Per-member share of a group expense */
+  groupExpenseSplits: defineTable({
+    expenseId: v.id("groupExpenses"),
+    groupId: v.id("expenseGroups"),
+    userId: v.id("users"),
+    shareAmount: v.number(),
+  })
+    .index("by_expense", ["expenseId"])
+    .index("by_group", ["groupId"])
+    .index("by_group_user", ["groupId", "userId"]),
+
+  /** Join requests via share ID — owner must approve */
+  expenseGroupJoinRequests: defineTable({
+    groupId: v.id("expenseGroups"),
+    userId: v.id("users"),
+    status: v.union(
+      v.literal("pending"),
+      v.literal("approved"),
+      v.literal("rejected"),
+    ),
+    resolvedAt: v.optional(v.number()),
+    resolvedBy: v.optional(v.id("users")),
+  })
+    .index("by_group", ["groupId"])
+    .index("by_group_status", ["groupId", "status"])
+    .index("by_user", ["userId"])
+    .index("by_user_status", ["userId", "status"])
+    .index("by_group_user", ["groupId", "userId"]),
 });

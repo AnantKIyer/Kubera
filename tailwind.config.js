@@ -52,8 +52,8 @@ module.exports = {
         sans: ["var(--font-sans)", "system-ui", "sans-serif"],
       },
       boxShadow: {
-        soft: "0 1px 3px 0 rgb(0 0 0 / 0.04), 0 6px 20px -8px rgb(0 0 0 / 0.08)",
-        glow: "0 2px 12px -4px hsl(var(--primary) / 0.2)",
+        soft: "0 1px 3px 0 rgb(0 0 0 / 0.06), 0 8px 24px -10px rgb(0 0 0 / 0.12)",
+        glow: "0 2px 16px -4px hsl(var(--primary) / 0.35)",
       },
       keyframes: {
         "fade-in": {

@@ -7,6 +7,7 @@ import {
   CreditCard,
   Repeat,
   TrendingUp,
+  Users,
   type LucideIcon,
 } from "lucide-react";
 
@@ -20,6 +21,7 @@ export const NAV_ITEMS: NavItem[] = [
   { href: "/", label: "Dashboard", icon: LayoutDashboard },
   { href: "/transactions", label: "Transactions", icon: ArrowLeftRight },
   { href: "/accounts", label: "Accounts", icon: CreditCard },
+  { href: "/groups", label: "Groups", icon: Users },
   { href: "/subscriptions", label: "Subscriptions", icon: Repeat },
   { href: "/investments", label: "Investments", icon: TrendingUp },
   { href: "/analytics", label: "Analytics", icon: PieChart },
@@ -28,7 +30,11 @@ export const NAV_ITEMS: NavItem[] = [
 ];
 
 /** Primary tabs shown in the mobile bottom bar. */
-export const MOBILE_PRIMARY_NAV = NAV_ITEMS.slice(0, 5);
+export const MOBILE_PRIMARY_NAV = NAV_ITEMS.slice(0, 4);
 
 /** Secondary routes opened from the mobile “More” menu. */
-export const MOBILE_MORE_NAV = NAV_ITEMS.slice(5);
+export const MOBILE_MORE_NAV = [
+  NAV_ITEMS[4], // subscriptions
+  NAV_ITEMS[5], // investments
+  ...NAV_ITEMS.slice(6),
+];

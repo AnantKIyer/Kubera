@@ -12,7 +12,7 @@ const iconsDir = join(root, "public", "icons");
 mkdirSync(iconsDir, { recursive: true });
 
 const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
-  <rect width="512" height="512" rx="112" fill="#4f8266"/>
+  <rect width="512" height="512" rx="112" fill="#367a56"/>
   <text x="256" y="278" text-anchor="middle" font-size="280" fill="#faf9f6" font-family="system-ui, -apple-system, sans-serif" font-weight="600">&#8377;</text>
 </svg>`;
 
