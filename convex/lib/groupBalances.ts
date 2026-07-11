@@ -7,11 +7,39 @@ export type MemberBalance = {
   net: number;
 };
 
+export type SplitShare = {
+  userId: Id<"users">;
+  shareAmount: number;
+  sharePercent?: number;
+};
+
+export type SettlementTransfer = {
+  fromUserId: Id<"users">;
+  toUserId: Id<"users">;
+  amount: number;
+};
+
+function roundMoney(value: number): number {
+  return Math.round(value * 100) / 100;
+}
+
+function assertSharesSumToAmount(
+  amount: number,
+  shares: { shareAmount: number }[],
+  label = "Shares",
+) {
+  const sum = roundMoney(shares.reduce((s, row) => s + row.shareAmount, 0));
+  const target = roundMoney(amount);
+  if (Math.abs(sum - target) > 0.009) {
+    throw new Error(`${label} must sum to ${target.toFixed(2)} (got ${sum.toFixed(2)})`);
+  }
+}
+
 /** Equal split with paise remainder distributed to first members. */
 export function equalSplitShares(
   amount: number,
   memberIds: Id<"users">[],
-): { userId: Id<"users">; shareAmount: number }[] {
+): SplitShare[] {
   if (memberIds.length === 0) return [];
   const n = memberIds.length;
   const totalPaise = Math.round(amount * 100);
@@ -28,10 +56,74 @@ export function equalSplitShares(
   });
 }
 
+/** Exact custom amounts — must sum to expense total. */
+export function amountSplitShares(
+  amount: number,
+  shares: { userId: Id<"users">; shareAmount: number }[],
+): SplitShare[] {
+  if (shares.length === 0) throw new Error("Select at least one person to split with");
+  for (const share of shares) {
+    if (!(share.shareAmount >= 0)) throw new Error("Share amounts must be zero or greater");
+  }
+  const normalized = shares.map((s) => ({
+    userId: s.userId,
+    shareAmount: roundMoney(s.shareAmount),
+  }));
+  assertSharesSumToAmount(amount, normalized, "Custom amounts");
+  return normalized;
+}
+
+/** Percent splits — percents must sum to 100; remainder paise go to first members. */
+export function percentSplitShares(
+  amount: number,
+  shares: { userId: Id<"users">; sharePercent: number }[],
+): SplitShare[] {
+  if (shares.length === 0) throw new Error("Select at least one person to split with");
+  for (const share of shares) {
+    if (!(share.sharePercent >= 0)) throw new Error("Percents must be zero or greater");
+  }
+
+  const percentSum = roundMoney(shares.reduce((s, row) => s + row.sharePercent, 0));
+  if (Math.abs(percentSum - 100) > 0.05) {
+    throw new Error(`Percents must sum to 100 (got ${percentSum})`);
+  }
+
+  const totalPaise = Math.round(amount * 100);
+  const provisional = shares.map((share) => {
+    const raw = (share.sharePercent / 100) * totalPaise;
+    const floorPaise = Math.floor(raw);
+    return {
+      userId: share.userId,
+      sharePercent: roundMoney(share.sharePercent),
+      floorPaise,
+      frac: raw - floorPaise,
+    };
+  });
+
+  let assigned = provisional.reduce((s, row) => s + row.floorPaise, 0);
+  let remainder = totalPaise - assigned;
+  const byFrac = [...provisional].sort((a, b) => b.frac - a.frac);
+  const bonus = new Set<string>();
+  for (const row of byFrac) {
+    if (remainder <= 0) break;
+    bonus.add(row.userId as string);
+    remainder -= 1;
+  }
+
+  const result = provisional.map((row) => ({
+    userId: row.userId,
+    sharePercent: row.sharePercent,
+    shareAmount: (row.floorPaise + (bonus.has(row.userId as string) ? 1 : 0)) / 100,
+  }));
+  assertSharesSumToAmount(amount, result, "Percent shares");
+  return result;
+}
+
 export function computeMemberBalances(
   expenses: { paidByUserId: Id<"users">; amount: number }[],
   splits: { userId: Id<"users">; shareAmount: number }[],
   memberIds: Id<"users">[],
+  settlements: SettlementTransfer[] = [],
 ): MemberBalance[] {
   const paid = new Map<string, number>();
   const owed = new Map<string, number>();
@@ -49,11 +141,30 @@ export function computeMemberBalances(
     owed.set(split.userId, (owed.get(split.userId) ?? 0) + split.shareAmount);
   }
 
-  return memberIds.map((userId) => {
+  const balances = memberIds.map((userId) => {
     const p = paid.get(userId) ?? 0;
     const o = owed.get(userId) ?? 0;
-    return { userId, paid: p, owed: o, net: Math.round((p - o) * 100) / 100 };
+    return { userId, paid: p, owed: o, net: roundMoney(p - o) };
   });
+
+  return applySettlements(balances, settlements);
+}
+
+/** A paid B → A's net up, B's net down (outstanding shrinks). */
+export function applySettlements(
+  balances: MemberBalance[],
+  settlements: SettlementTransfer[],
+): MemberBalance[] {
+  if (settlements.length === 0) return balances;
+
+  const map = new Map(balances.map((b) => [b.userId as string, { ...b }]));
+  for (const settlement of settlements) {
+    const from = map.get(settlement.fromUserId as string);
+    const to = map.get(settlement.toUserId as string);
+    if (from) from.net = roundMoney(from.net + settlement.amount);
+    if (to) to.net = roundMoney(to.net - settlement.amount);
+  }
+  return balances.map((b) => map.get(b.userId as string) ?? b);
 }
 
 export type SimplifiedDebt = {
@@ -80,7 +191,7 @@ export function simplifyDebts(balances: MemberBalance[]): SimplifiedDebt[] {
 
   while (i < creditors.length && j < debtors.length) {
     const pay = Math.min(creditors[i].amount, debtors[j].amount);
-    const rounded = Math.round(pay * 100) / 100;
+    const rounded = roundMoney(pay);
     if (rounded > 0) {
       debts.push({
         fromUserId: debtors[j].userId,
@@ -88,8 +199,8 @@ export function simplifyDebts(balances: MemberBalance[]): SimplifiedDebt[] {
         amount: rounded,
       });
     }
-    creditors[i].amount = Math.round((creditors[i].amount - pay) * 100) / 100;
-    debtors[j].amount = Math.round((debtors[j].amount - pay) * 100) / 100;
+    creditors[i].amount = roundMoney(creditors[i].amount - pay);
+    debtors[j].amount = roundMoney(debtors[j].amount - pay);
     if (creditors[i].amount <= 0.005) i++;
     if (debtors[j].amount <= 0.005) j++;
   }
@@ -103,6 +214,7 @@ export function computePairwiseDebtsWithUser(
   expenses: { _id: Id<"groupExpenses">; paidByUserId: Id<"users"> }[],
   splits: { expenseId: Id<"groupExpenses">; userId: Id<"users">; shareAmount: number }[],
   otherMemberIds: Id<"users">[],
+  settlements: SettlementTransfer[] = [],
 ): { otherUserId: Id<"users">; amount: number }[] {
   const net = new Map<string, number>();
 
@@ -128,10 +240,24 @@ export function computePairwiseDebtsWithUser(
     }
   }
 
+  for (const settlement of settlements) {
+    if (settlement.fromUserId === userId && net.has(settlement.toUserId as string)) {
+      net.set(
+        settlement.toUserId as string,
+        (net.get(settlement.toUserId as string) ?? 0) + settlement.amount,
+      );
+    } else if (settlement.toUserId === userId && net.has(settlement.fromUserId as string)) {
+      net.set(
+        settlement.fromUserId as string,
+        (net.get(settlement.fromUserId as string) ?? 0) - settlement.amount,
+      );
+    }
+  }
+
   return otherMemberIds
     .map((otherUserId) => ({
       otherUserId,
-      amount: Math.round((net.get(otherUserId) ?? 0) * 100) / 100,
+      amount: roundMoney(net.get(otherUserId as string) ?? 0),
     }))
     .filter((d) => Math.abs(d.amount) > 0.005)
     .sort((a, b) => Math.abs(b.amount) - Math.abs(a.amount));
@@ -171,9 +297,9 @@ export function computeGroupSpendAnalytics(
     .map(([monthKey, total]) => ({ month: monthKey, total }));
 
   return {
-    allTime: Math.round(allTime * 100) / 100,
-    ytd: Math.round(ytd * 100) / 100,
-    mtd: Math.round(mtd * 100) / 100,
+    allTime: roundMoney(allTime),
+    ytd: roundMoney(ytd),
+    mtd: roundMoney(mtd),
     monthly,
   };
 }

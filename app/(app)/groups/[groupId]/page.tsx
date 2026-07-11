@@ -98,6 +98,14 @@ export default function GroupDetailPage() {
   const [date, setDate] = useState(toISODate(new Date()));
   const [paidByUserId, setPaidByUserId] = useState("");
   const [splitUserIds, setSplitUserIds] = useState<string[]>([]);
+  const [splitType, setSplitType] = useState<"equal" | "amount" | "percent">("equal");
+  const [shareAmounts, setShareAmounts] = useState<Record<string, string>>({});
+  const [sharePercents, setSharePercents] = useState<Record<string, string>>({});
+  const [settleFromUserId, setSettleFromUserId] = useState("");
+  const [settleToUserId, setSettleToUserId] = useState("");
+  const [settleAmount, setSettleAmount] = useState("");
+  const [settleDate, setSettleDate] = useState(toISODate(new Date()));
+  const [settleNote, setSettleNote] = useState("");
   const [memberUsername, setMemberUsername] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -113,6 +121,8 @@ export default function GroupDetailPage() {
 
   const createExpense = useMutation(api.groups.createExpense);
   const removeExpense = useMutation(api.groups.removeExpense);
+  const recordSettlement = useMutation(api.groups.recordSettlement);
+  const removeSettlement = useMutation(api.groups.removeSettlement);
   const addMember = useMutation(api.groups.addMember);
   const removeMember = useMutation(api.groups.removeMember);
   const leaveGroup = useMutation(api.groups.leave);
@@ -152,26 +162,81 @@ export default function GroupDetailPage() {
         : detail.members.map((m) => m.userId as string);
     const n = ids.length;
     if (n === 0) return null;
-    const perPerson = Math.round((base / n) * 100) / 100;
-    return { total: base, perPerson, count: n };
-  }, [amount, currency, exchangeRate, splitUserIds, detail]);
+
+    if (splitType === "equal") {
+      const shares = ids.map((id, index) => {
+        const totalPaise = Math.round(base * 100);
+        const basePaise = Math.floor(totalPaise / n);
+        const remainder = totalPaise - basePaise * n;
+        const paise = basePaise + (index < remainder ? 1 : 0);
+        return { id, amount: paise / 100 };
+      });
+      return { total: base, mode: "equal" as const, shares, count: n };
+    }
+
+    if (splitType === "amount") {
+      const shares = ids.map((id) => ({
+        id,
+        amount: Number(shareAmounts[id] || 0),
+      }));
+      const sum = Math.round(shares.reduce((s, row) => s + row.amount, 0) * 100) / 100;
+      return { total: base, mode: "amount" as const, shares, sum, count: n };
+    }
+
+    const shares = ids.map((id) => {
+      const percent = Number(sharePercents[id] || 0);
+      return {
+        id,
+        percent,
+        amount: Math.round(((percent / 100) * base) * 100) / 100,
+      };
+    });
+    const percentSum = Math.round(shares.reduce((s, row) => s + row.percent, 0) * 100) / 100;
+    return { total: base, mode: "percent" as const, shares, percentSum, count: n };
+  }, [amount, currency, exchangeRate, splitUserIds, detail, splitType, shareAmounts, sharePercents]);
 
   const openExpenseModal = () => {
+    const memberIds = detail?.members.map((m) => m.userId as string) ?? [];
     setDescription("");
     setAmount("");
     setCurrency(BASE_CURRENCY);
     setExchangeRate(null);
     setDate(toISODate(new Date()));
     setPaidByUserId(me?._id ?? "");
-    setSplitUserIds(detail?.members.map((m) => m.userId as string) ?? []);
+    setSplitUserIds(memberIds);
+    setSplitType("equal");
+    setShareAmounts({});
+    setSharePercents(
+      Object.fromEntries(memberIds.map((id) => [id, memberIds.length ? String(Math.round((100 / memberIds.length) * 100) / 100) : "0"])),
+    );
     setError(null);
     setExpenseOpen(true);
   };
 
+  const openSettleModal = (preset?: { fromUserId?: string; toUserId?: string; amount?: number }) => {
+    setSettleFromUserId(preset?.fromUserId ?? me?._id ?? "");
+    setSettleToUserId(preset?.toUserId ?? "");
+    setSettleAmount(preset?.amount != null ? String(preset.amount) : "");
+    setSettleDate(toISODate(new Date()));
+    setSettleNote("");
+    setError(null);
+    setSettleOpen(true);
+  };
+
   const toggleSplitMember = (userId: string) => {
-    setSplitUserIds((prev) =>
-      prev.includes(userId) ? prev.filter((id) => id !== userId) : [...prev, userId],
-    );
+    setSplitUserIds((prev) => {
+      const next = prev.includes(userId)
+        ? prev.filter((id) => id !== userId)
+        : [...prev, userId];
+      if (!prev.includes(userId)) {
+        setShareAmounts((amounts) => ({ ...amounts, [userId]: amounts[userId] ?? "" }));
+        setSharePercents((percents) => ({
+          ...percents,
+          [userId]: percents[userId] ?? "",
+        }));
+      }
+      return next;
+    });
   };
 
   const handleAddExpense = async (e: React.FormEvent) => {
@@ -201,17 +266,81 @@ export default function GroupDetailPage() {
 
     setSaving(true);
     try {
-      await createExpense({
-        groupId,
-        description: description.trim(),
-        amount: baseAmount,
-        date,
-        paidByUserId: paidByUserId as Id<"users">,
-        splitAmongUserIds: splitUserIds as Id<"users">[],
-      });
+      if (splitType === "equal") {
+        await createExpense({
+          groupId,
+          description: description.trim(),
+          amount: baseAmount,
+          date,
+          paidByUserId: paidByUserId as Id<"users">,
+          splitType: "equal",
+          splitAmongUserIds: splitUserIds as Id<"users">[],
+        });
+      } else if (splitType === "amount") {
+        await createExpense({
+          groupId,
+          description: description.trim(),
+          amount: baseAmount,
+          date,
+          paidByUserId: paidByUserId as Id<"users">,
+          splitType: "amount",
+          splits: splitUserIds.map((userId) => ({
+            userId: userId as Id<"users">,
+            shareAmount: Number(shareAmounts[userId] || 0),
+          })),
+        });
+      } else {
+        await createExpense({
+          groupId,
+          description: description.trim(),
+          amount: baseAmount,
+          date,
+          paidByUserId: paidByUserId as Id<"users">,
+          splitType: "percent",
+          splits: splitUserIds.map((userId) => ({
+            userId: userId as Id<"users">,
+            sharePercent: Number(sharePercents[userId] || 0),
+          })),
+        });
+      }
       setExpenseOpen(false);
     } catch (err) {
       setError(parseUserError(err, "Could not add expense."));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleRecordSettlement = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError(null);
+    const amountValue = Number(settleAmount);
+    if (!(amountValue > 0)) {
+      setError("Enter a valid settlement amount");
+      return;
+    }
+    if (!settleFromUserId || !settleToUserId) {
+      setError("Choose who paid and who received");
+      return;
+    }
+    if (settleFromUserId === settleToUserId) {
+      setError("Payer and recipient must be different");
+      return;
+    }
+
+    setSaving(true);
+    try {
+      await recordSettlement({
+        groupId,
+        fromUserId: settleFromUserId as Id<"users">,
+        toUserId: settleToUserId as Id<"users">,
+        amount: amountValue,
+        date: settleDate,
+        note: settleNote.trim() || undefined,
+      });
+      setSettleOpen(false);
+    } catch (err) {
+      setError(parseUserError(err, "Could not record settlement."));
     } finally {
       setSaving(false);
     }
@@ -418,8 +547,13 @@ export default function GroupDetailPage() {
           )}
 
           {settlements.length > 0 && (
-            <Button className="mt-4 w-full" onClick={() => setSettleOpen(true)}>
+            <Button className="mt-4 w-full" onClick={() => openSettleModal()}>
               <Banknote size={16} /> Settle up
+            </Button>
+          )}
+          {settlements.length === 0 && (
+            <Button className="mt-4 w-full" variant="outline" onClick={() => openSettleModal()}>
+              <Banknote size={16} /> Record a settlement
             </Button>
           )}
         </CardContent>
@@ -508,6 +642,11 @@ export default function GroupDetailPage() {
                     <p className="mt-0.5 text-xs text-muted-foreground">
                       {formatDate(exp.date)} · {exp.paidByName}
                       {exp.paidByUserId === me?._id ? " (you paid)" : ""}
+                      {exp.splitType === "amount"
+                        ? " · exact amounts"
+                        : exp.splitType === "percent"
+                          ? " · percent split"
+                          : ""}
                     </p>
                     <div className="mt-1.5 flex flex-wrap gap-3 text-xs">
                       {exp.myLent > 0 && (
@@ -531,6 +670,57 @@ export default function GroupDetailPage() {
                       onClick={() => {
                         if (confirm("Delete this expense?")) {
                           removeExpense({ expenseId: exp._id });
+                        }
+                      }}
+                      className="shrink-0 self-start rounded-md p-1.5 text-muted-foreground hover:bg-[hsl(var(--expense))]/10 hover:text-[hsl(var(--expense))]"
+                    >
+                      <Trash2 size={14} />
+                    </button>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Settlement history */}
+      <Card className="mb-4">
+        <CardHeader className="pb-2">
+          <CardTitle className="flex items-center gap-2 text-base">
+            <Banknote size={16} className="text-primary" />
+            Settlement history
+            <span className="text-sm font-normal text-muted-foreground">
+              ({detail.summary.settlementCount})
+            </span>
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          {detail.settlements.length === 0 ? (
+            <p className="text-sm text-muted-foreground">
+              No settlements recorded yet. Use Settle up after paying someone outside Kubera.
+            </p>
+          ) : (
+            <div className="divide-y divide-border/60">
+              {detail.settlements.map((s) => (
+                <div key={s._id} className="flex gap-3 py-3 first:pt-0 last:pb-0">
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm">
+                      <span className="font-medium">{s.fromName}</span> paid{" "}
+                      <span className="font-semibold tabular-nums">{formatCurrency(s.amount)}</span>{" "}
+                      to <span className="font-medium">{s.toName}</span>
+                    </p>
+                    <p className="mt-0.5 text-xs text-muted-foreground">
+                      {formatDate(s.date)}
+                      {s.note ? ` · ${s.note}` : ""}
+                    </p>
+                  </div>
+                  {s.canDelete && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (confirm("Delete this settlement?")) {
+                          removeSettlement({ settlementId: s._id });
                         }
                       }}
                       className="shrink-0 self-start rounded-md p-1.5 text-muted-foreground hover:bg-[hsl(var(--expense))]/10 hover:text-[hsl(var(--expense))]"
@@ -704,68 +894,119 @@ export default function GroupDetailPage() {
       <Modal
         open={settleOpen}
         onClose={() => setSettleOpen(false)}
-        title="Settle up"
-        description="Clear these balances outside Kubera — mark payments in cash, UPI, or bank transfer."
+        title="Record settlement"
+        description="Log a payment between members to update outstanding balances."
+        size="lg"
         footer={
-          <Button variant="outline" onClick={() => setSettleOpen(false)}>
-            Done
-          </Button>
+          <FormFooter
+            formId="settlement-form"
+            onCancel={() => setSettleOpen(false)}
+            submitLabel="Record settlement"
+            loading={saving}
+          />
         }
       >
-        <div className="space-y-4">
-          <div className="rounded-xl bg-muted/30 px-4 py-3">
-            <p className="text-xs text-muted-foreground">Your net balance</p>
-            <p
-              className={cn(
-                "text-xl font-bold tabular-nums",
-                myBalance.tone === "positive" && "text-[hsl(var(--income))]",
-                myBalance.tone === "negative" && "text-[hsl(var(--expense))]",
-              )}
-            >
-              {myBalance.tone === "neutral"
-                ? "Settled"
-                : `${myBalance.tone === "positive" ? "+" : "−"}${formatCurrency(myBalance.amount)}`}
-            </p>
-          </div>
-
-          <div className="space-y-2">
-            {settlements.map((s) => (
-              <div
-                key={s.otherUserId}
-                className="rounded-xl border border-border px-3 py-2.5 text-sm"
-              >
-                {s.direction === "owe" ? (
-                  <p>
-                    Pay <span className="font-medium">{s.otherName}</span>{" "}
-                    <span className="font-semibold tabular-nums text-[hsl(var(--expense))]">
-                      {formatCurrency(s.amount)}
-                    </span>
-                  </p>
-                ) : (
-                  <p>
-                    Collect <span className="font-semibold tabular-nums text-[hsl(var(--income))]">
-                      {formatCurrency(s.amount)}
-                    </span>{" "}
-                    from <span className="font-medium">{s.otherName}</span>
-                  </p>
-                )}
+        <form id="settlement-form" onSubmit={handleRecordSettlement}>
+          <FormBody>
+            {settlements.length > 0 && (
+              <div className="space-y-2">
+                <p className="text-xs font-medium text-muted-foreground">Suggested</p>
+                {settlements.map((s) => {
+                  const fromUserId = s.direction === "owe" ? (me?._id ?? "") : s.otherUserId;
+                  const toUserId = s.direction === "owe" ? s.otherUserId : (me?._id ?? "");
+                  return (
+                    <button
+                      key={`${s.otherUserId}-${s.direction}`}
+                      type="button"
+                      onClick={() => {
+                        setSettleFromUserId(fromUserId);
+                        setSettleToUserId(toUserId);
+                        setSettleAmount(String(s.amount));
+                      }}
+                      className="flex w-full items-center justify-between rounded-xl border border-border px-3 py-2.5 text-left text-sm hover:border-primary/40"
+                    >
+                      <span>
+                        {s.direction === "owe" ? (
+                          <>
+                            You pay <span className="font-medium">{s.otherName}</span>
+                          </>
+                        ) : (
+                          <>
+                            <span className="font-medium">{s.otherName}</span> pays you
+                          </>
+                        )}
+                      </span>
+                      <span className="font-semibold tabular-nums">{formatCurrency(s.amount)}</span>
+                    </button>
+                  );
+                })}
               </div>
-            ))}
-          </div>
+            )}
 
-          <div className="rounded-xl border border-border/60 px-3 py-2.5 text-sm">
-            <p className="text-muted-foreground">Total group spend</p>
-            <p className="font-semibold tabular-nums">
-              {formatCurrency(detail.summary.totalSpent)}
-            </p>
-          </div>
+            <FormRow>
+              <FormField label="Paid by">
+                <Select
+                  value={settleFromUserId}
+                  onChange={(e) => setSettleFromUserId(e.target.value)}
+                  required
+                >
+                  <option value="">Select member</option>
+                  {detail.members.map((m) => (
+                    <option key={m.userId} value={m.userId}>
+                      {m.name ?? m.username ?? "Member"}
+                    </option>
+                  ))}
+                </Select>
+              </FormField>
+              <FormField label="Paid to">
+                <Select
+                  value={settleToUserId}
+                  onChange={(e) => setSettleToUserId(e.target.value)}
+                  required
+                >
+                  <option value="">Select member</option>
+                  {detail.members.map((m) => (
+                    <option key={m.userId} value={m.userId}>
+                      {m.name ?? m.username ?? "Member"}
+                    </option>
+                  ))}
+                </Select>
+              </FormField>
+            </FormRow>
 
-          <p className="text-xs text-muted-foreground">
-            {simplifyDebts
-              ? "Simplified debts minimize the number of payments needed."
-              : "Showing direct balances with each person."}
-          </p>
-        </div>
+            <FormRow>
+              <FormField label="Amount">
+                <Input
+                  type="number"
+                  min="0.01"
+                  step="0.01"
+                  value={settleAmount}
+                  onChange={(e) => setSettleAmount(e.target.value)}
+                  required
+                />
+              </FormField>
+              <FormField label="Date">
+                <DatePicker value={settleDate} onChange={setSettleDate} required />
+              </FormField>
+            </FormRow>
+
+            <FormField label="Note (optional)">
+              <Input
+                value={settleNote}
+                onChange={(e) => setSettleNote(e.target.value)}
+                placeholder="UPI, cash, bank transfer…"
+              />
+            </FormField>
+
+            {error && (
+              <FormError
+                title="Couldn't record settlement"
+                message={error}
+                onDismiss={() => setError(null)}
+              />
+            )}
+          </FormBody>
+        </form>
       </Modal>
 
       {/* Add expense modal */}
@@ -773,7 +1014,7 @@ export default function GroupDetailPage() {
         open={expenseOpen}
         onClose={() => setExpenseOpen(false)}
         title="Add expense"
-        description="Split equally among selected members."
+        description="Split equally, by exact amounts, or by percentage."
         size="lg"
         footer={
           <FormFooter
@@ -827,6 +1068,32 @@ export default function GroupDetailPage() {
               </FormField>
             </FormRow>
 
+            <FormField label="Split type">
+              <div className="flex flex-wrap gap-2">
+                {(
+                  [
+                    ["equal", "Equal"],
+                    ["amount", "Exact amounts"],
+                    ["percent", "Percent"],
+                  ] as const
+                ).map(([value, label]) => (
+                  <button
+                    key={value}
+                    type="button"
+                    onClick={() => setSplitType(value)}
+                    className={cn(
+                      "rounded-full border px-3 py-1.5 text-xs font-medium transition-colors",
+                      splitType === value
+                        ? "border-primary bg-primary/10 text-primary"
+                        : "border-border text-muted-foreground hover:border-primary/40",
+                    )}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </FormField>
+
             <FormField label="Split among">
               <div className="flex flex-wrap gap-2">
                 {detail.members.map((m) => {
@@ -848,13 +1115,71 @@ export default function GroupDetailPage() {
                   );
                 })}
               </div>
-              {splitPreview && (
-                <FormHint>
-                  {formatCurrency(splitPreview.perPerson)} per person ({splitPreview.count}{" "}
-                  people) · total {formatCurrency(splitPreview.total)}
-                </FormHint>
-              )}
             </FormField>
+
+            {splitType !== "equal" && splitUserIds.length > 0 && (
+              <div className="space-y-2 rounded-xl border border-border/60 p-3">
+                {splitUserIds.map((userId) => {
+                  const member = detail.members.find((m) => m.userId === userId);
+                  const label = member?.name ?? member?.username ?? "Member";
+                  return (
+                    <div key={userId} className="flex items-center gap-3">
+                      <p className="min-w-0 flex-1 truncate text-sm">{label}</p>
+                      {splitType === "amount" ? (
+                        <Input
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          className="w-28"
+                          value={shareAmounts[userId] ?? ""}
+                          onChange={(e) =>
+                            setShareAmounts((prev) => ({ ...prev, [userId]: e.target.value }))
+                          }
+                          placeholder="0.00"
+                          required
+                        />
+                      ) : (
+                        <div className="flex items-center gap-1">
+                          <Input
+                            type="number"
+                            min="0"
+                            max="100"
+                            step="0.01"
+                            className="w-24"
+                            value={sharePercents[userId] ?? ""}
+                            onChange={(e) =>
+                              setSharePercents((prev) => ({ ...prev, [userId]: e.target.value }))
+                            }
+                            placeholder="0"
+                            required
+                          />
+                          <span className="text-xs text-muted-foreground">%</span>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
+            {splitPreview && splitPreview.mode === "equal" && (
+              <FormHint>
+                {formatCurrency(splitPreview.shares[0]?.amount ?? 0)} per person (
+                {splitPreview.count} people) · total {formatCurrency(splitPreview.total)}
+              </FormHint>
+            )}
+            {splitPreview && splitPreview.mode === "amount" && (
+              <FormHint>
+                Entered {formatCurrency(splitPreview.sum)} of {formatCurrency(splitPreview.total)}
+                {Math.abs(splitPreview.sum - splitPreview.total) > 0.009 ? " — must match total" : ""}
+              </FormHint>
+            )}
+            {splitPreview && splitPreview.mode === "percent" && (
+              <FormHint>
+                Percents total {splitPreview.percentSum}%
+                {Math.abs(splitPreview.percentSum - 100) > 0.05 ? " — must equal 100%" : ""}
+              </FormHint>
+            )}
 
             {error && (
               <FormError title="Couldn't add expense" message={error} onDismiss={() => setError(null)} />

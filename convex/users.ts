@@ -8,6 +8,7 @@ import { Id } from "./_generated/dataModel";
 import { action, internalQuery, mutation, query } from "./_generated/server";
 import { internal } from "./_generated/api";
 import { normalizeEmail } from "../lib/auth/normalize";
+import { BASE_CURRENCY, isLogCurrency, resolveHomeCurrency } from "../lib/currency";
 import { requireUserId } from "./lib/user";
 
 const PROVIDER_ID = "password";
@@ -37,6 +38,7 @@ export const me = query({
       email: user.email ?? null,
       phone: user.phone ?? null,
       imageUrl,
+      homeCurrency: resolveHomeCurrency(user.homeCurrency),
     };
   },
 });
@@ -61,6 +63,23 @@ export const updateProfile = mutation({
       throw new ConvexError("Name is required.");
     }
     await ctx.db.patch(userId, { name: trimmed });
+  },
+});
+
+export const updateHomeCurrency = mutation({
+  args: {
+    homeCurrency: v.string(),
+  },
+  handler: async (ctx, { homeCurrency }) => {
+    const userId = await requireUserId(ctx);
+    const code = homeCurrency.trim().toUpperCase();
+    if (!isLogCurrency(code)) {
+      throw new ConvexError("Unsupported currency.");
+    }
+    await ctx.db.patch(userId, {
+      homeCurrency: code === BASE_CURRENCY ? undefined : code,
+    });
+    return resolveHomeCurrency(code);
   },
 });
 

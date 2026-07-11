@@ -1,9 +1,13 @@
 "use client";
 
 import { useEffect, useState, type ReactNode } from "react";
-import { Download, Share, Smartphone } from "lucide-react";
+import { useQuery } from "convex/react";
+import { Download, Share } from "lucide-react";
+import { api } from "@/convex/_generated/api";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { BASE_CURRENCY } from "@/lib/currency";
+import { iconPath } from "@/lib/pwa-icons";
 import {
   type BeforeInstallPromptEvent,
   isAndroid,
@@ -12,12 +16,16 @@ import {
 } from "@/lib/pwa";
 
 export function InstallAppCard() {
+  const user = useQuery(api.users.me);
   const [mounted, setMounted] = useState(false);
   const [standalone, setStandalone] = useState(false);
   const [ios, setIos] = useState(false);
   const [android, setAndroid] = useState(false);
   const [installPrompt, setInstallPrompt] = useState<BeforeInstallPromptEvent | null>(null);
   const [installing, setInstalling] = useState(false);
+
+  const homeCurrency = user?.homeCurrency ?? BASE_CURRENCY;
+  const brandIcon = iconPath(homeCurrency, 180);
 
   useEffect(() => {
     setMounted(true);
@@ -57,9 +65,14 @@ export function InstallAppCard() {
     <Card>
       <CardHeader>
         <div className="flex items-start gap-3">
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
-            <Smartphone size={20} />
-          </div>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={brandIcon}
+            alt=""
+            width={40}
+            height={40}
+            className="h-10 w-10 shrink-0 rounded-xl"
+          />
           <div>
             <CardTitle>Install Kubera</CardTitle>
             <CardDescription>
@@ -80,7 +93,7 @@ export function InstallAppCard() {
             />
             <InstallStep
               step={2}
-              title='Tap Share'
+              title="Tap Share"
               description="The square icon with an arrow pointing up, at the bottom of Safari."
               icon={<Share size={14} className="inline text-foreground" />}
             />

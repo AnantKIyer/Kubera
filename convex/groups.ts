@@ -3,10 +3,12 @@ import { mutation, query, MutationCtx, QueryCtx } from "./_generated/server";
 import { Id } from "./_generated/dataModel";
 import { requireUserId } from "./lib/user";
 import {
+  amountSplitShares,
   computeGroupSpendAnalytics,
   computeMemberBalances,
   computePairwiseDebtsWithUser,
   equalSplitShares,
+  percentSplitShares,
   simplifyDebts,
 } from "./lib/groupBalances";
 import {
@@ -110,6 +112,31 @@ async function getPendingJoinRequest(
     .first();
 }
 
+async function getGroupSettlements(ctx: DbCtx, groupId: Id<"expenseGroups">) {
+  return ctx.db
+    .query("groupSettlements")
+    .withIndex("by_group", (q) => q.eq("groupId", groupId))
+    .collect();
+}
+
+async function getGroupExpensesAndSplits(ctx: DbCtx, groupId: Id<"expenseGroups">) {
+  const expenses = await ctx.db
+    .query("groupExpenses")
+    .withIndex("by_group", (q) => q.eq("groupId", groupId))
+    .collect();
+  const splits = (
+    await Promise.all(
+      expenses.map((e) =>
+        ctx.db
+          .query("groupExpenseSplits")
+          .withIndex("by_expense", (q) => q.eq("expenseId", e._id))
+          .collect(),
+      ),
+    )
+  ).flat();
+  return { expenses, splits };
+}
+
 export const listMyGroups = query({
   args: {},
   handler: async (ctx) => {
@@ -125,23 +152,11 @@ export const listMyGroups = query({
         if (!raw) return null;
         const group = await decryptGroup(raw);
         const members = await getGroupMembers(ctx, m.groupId);
-        const expenses = await ctx.db
-          .query("groupExpenses")
-          .withIndex("by_group", (q) => q.eq("groupId", m.groupId))
-          .collect();
-        const splits = (
-          await Promise.all(
-            expenses.map((e) =>
-              ctx.db
-                .query("groupExpenseSplits")
-                .withIndex("by_expense", (q) => q.eq("expenseId", e._id))
-                .collect(),
-            ),
-          )
-        ).flat();
+        const { expenses, splits } = await getGroupExpensesAndSplits(ctx, m.groupId);
+        const settlements = await getGroupSettlements(ctx, m.groupId);
 
         const memberIds = members.map((mb) => mb.userId);
-        const balances = computeMemberBalances(expenses, splits, memberIds);
+        const balances = computeMemberBalances(expenses, splits, memberIds, settlements);
         const myBalance = balances.find((b) => b.userId === userId)?.net ?? 0;
 
         return {
@@ -178,25 +193,14 @@ export const listSummary = query({
     let totalIOwe = 0;
 
     for (const m of memberships) {
-      const expenses = await ctx.db
-        .query("groupExpenses")
-        .withIndex("by_group", (q) => q.eq("groupId", m.groupId))
-        .collect();
-      const splits = (
-        await Promise.all(
-          expenses.map((e) =>
-            ctx.db
-              .query("groupExpenseSplits")
-              .withIndex("by_expense", (q) => q.eq("expenseId", e._id))
-              .collect(),
-          ),
-        )
-      ).flat();
+      const { expenses, splits } = await getGroupExpensesAndSplits(ctx, m.groupId);
+      const settlements = await getGroupSettlements(ctx, m.groupId);
       const members = await getGroupMembers(ctx, m.groupId);
       const balances = computeMemberBalances(
         expenses,
         splits,
         members.map((mb) => mb.userId),
+        settlements,
       );
       const myBalance = balances.find((b) => b.userId === userId)?.net ?? 0;
       if (myBalance > 0.005) totalOwedToMe += myBalance;
@@ -306,8 +310,13 @@ export const getDetail = query({
       )
     ).flat();
 
+    const rawSettlements = await getGroupSettlements(ctx, groupId);
+    rawSettlements.sort((a, b) =>
+      a.date === b.date ? b._creationTime - a._creationTime : b.date.localeCompare(a.date),
+    );
+
     const memberIds = memberRows.map((m) => m.userId);
-    const balances = computeMemberBalances(rawExpenses, allSplits, memberIds);
+    const balances = computeMemberBalances(rawExpenses, allSplits, memberIds, rawSettlements);
     const debts = simplifyDebts(balances);
     const otherMemberIds = memberIds.filter((id) => id !== userId);
     const pairwiseWithMe = computePairwiseDebtsWithUser(
@@ -315,6 +324,7 @@ export const getDetail = query({
       rawExpenses,
       allSplits,
       otherMemberIds,
+      rawSettlements,
     );
 
     const profileById = new Map(memberProfiles.map((p) => [p.userId, p]));
@@ -344,6 +354,7 @@ export const getDetail = query({
           date: expense.date,
           paidByUserId: expense.paidByUserId,
           createdBy: expense.createdBy,
+          splitType: expense.splitType ?? "equal",
           paidByName: payer?.name ?? payer?.username ?? "Someone",
           myLent,
           myBorrowed,
@@ -352,6 +363,7 @@ export const getDetail = query({
             return {
               userId: s.userId,
               shareAmount: s.shareAmount,
+              sharePercent: s.sharePercent ?? null,
               name: member?.name ?? member?.username ?? "Member",
             };
           }),
@@ -415,6 +427,29 @@ export const getDetail = query({
     const myBalance = myMemberBalance?.net ?? 0;
     const analytics = computeGroupSpendAnalytics(rawExpenses);
 
+    const settlements = rawSettlements.map((s) => ({
+      _id: s._id,
+      fromUserId: s.fromUserId,
+      toUserId: s.toUserId,
+      amount: s.amount,
+      date: s.date,
+      note: s.note ?? null,
+      createdBy: s.createdBy,
+      fromName:
+        profileById.get(s.fromUserId)?.name ??
+        profileById.get(s.fromUserId)?.username ??
+        "Member",
+      toName:
+        profileById.get(s.toUserId)?.name ??
+        profileById.get(s.toUserId)?.username ??
+        "Member",
+      canDelete:
+        s.createdBy === userId ||
+        s.fromUserId === userId ||
+        s.toUserId === userId ||
+        membership.role === "owner",
+    }));
+
     let pendingJoinRequests: {
       _id: Id<"expenseGroupJoinRequests">;
       userId: Id<"users">;
@@ -472,10 +507,12 @@ export const getDetail = query({
       })),
       debts: debtsEnriched,
       expenses,
+      settlements,
       summary: {
         totalSpent,
         expenseCount: expenses.length,
         memberCount: memberProfiles.length,
+        settlementCount: settlements.length,
       },
       analytics,
     };
@@ -737,9 +774,18 @@ export const remove = mutation({
       .collect();
     for (const req of joinRequests) await ctx.db.delete(req._id);
 
+    const settlements = await getGroupSettlements(ctx, groupId);
+    for (const settlement of settlements) await ctx.db.delete(settlement._id);
+
     await ctx.db.delete(groupId);
   },
 });
+
+const splitTypeValidator = v.union(
+  v.literal("equal"),
+  v.literal("amount"),
+  v.literal("percent"),
+);
 
 export const createExpense = mutation({
   args: {
@@ -748,7 +794,17 @@ export const createExpense = mutation({
     amount: v.number(),
     date: v.string(),
     paidByUserId: v.id("users"),
+    splitType: v.optional(splitTypeValidator),
     splitAmongUserIds: v.optional(v.array(v.id("users"))),
+    splits: v.optional(
+      v.array(
+        v.object({
+          userId: v.id("users"),
+          shareAmount: v.optional(v.number()),
+          sharePercent: v.optional(v.number()),
+        }),
+      ),
+    ),
   },
   handler: async (ctx, args) => {
     const userId = await requireUserId(ctx);
@@ -765,16 +821,48 @@ export const createExpense = mutation({
       throw new Error("Payer must be a group member");
     }
 
-    const splitIds =
-      args.splitAmongUserIds && args.splitAmongUserIds.length > 0
-        ? args.splitAmongUserIds
-        : members.map((m) => m.userId);
+    const splitType = args.splitType ?? "equal";
+    let shares: { userId: Id<"users">; shareAmount: number; sharePercent?: number }[];
 
-    for (const id of splitIds) {
-      if (!memberIds.has(id)) throw new Error("All split members must be in the group");
+    if (splitType === "equal") {
+      const splitIds = uniqueUserIds(
+        args.splits?.map((s) => s.userId) ??
+          args.splitAmongUserIds ??
+          members.map((m) => m.userId),
+      );
+      if (splitIds.length === 0) throw new Error("Select at least one person to split with");
+      for (const id of splitIds) {
+        if (!memberIds.has(id)) throw new Error("All split members must be in the group");
+      }
+      shares = equalSplitShares(args.amount, splitIds);
+    } else if (splitType === "amount") {
+      if (!args.splits || args.splits.length === 0) {
+        throw new Error("Provide custom amounts for each person");
+      }
+      const rows = uniqueSplitRows(args.splits);
+      for (const row of rows) {
+        if (!memberIds.has(row.userId)) throw new Error("All split members must be in the group");
+        if (row.shareAmount === undefined) throw new Error("Each split needs an amount");
+      }
+      shares = amountSplitShares(
+        args.amount,
+        rows.map((row) => ({ userId: row.userId, shareAmount: row.shareAmount! })),
+      );
+    } else {
+      if (!args.splits || args.splits.length === 0) {
+        throw new Error("Provide percents for each person");
+      }
+      const rows = uniqueSplitRows(args.splits);
+      for (const row of rows) {
+        if (!memberIds.has(row.userId)) throw new Error("All split members must be in the group");
+        if (row.sharePercent === undefined) throw new Error("Each split needs a percent");
+      }
+      shares = percentSplitShares(
+        args.amount,
+        rows.map((row) => ({ userId: row.userId, sharePercent: row.sharePercent! })),
+      );
     }
 
-    const shares = equalSplitShares(args.amount, splitIds);
     const sensitive = await encryptGroupExpenseFields({ description });
 
     const expenseId = await ctx.db.insert("groupExpenses", {
@@ -784,6 +872,7 @@ export const createExpense = mutation({
       description: sensitive.description!,
       date: args.date,
       createdBy: userId,
+      splitType,
     });
 
     for (const share of shares) {
@@ -792,10 +881,67 @@ export const createExpense = mutation({
         groupId: args.groupId,
         userId: share.userId,
         shareAmount: share.shareAmount,
+        ...(share.sharePercent !== undefined ? { sharePercent: share.sharePercent } : {}),
       });
     }
 
     return expenseId;
+  },
+});
+
+export const recordSettlement = mutation({
+  args: {
+    groupId: v.id("expenseGroups"),
+    fromUserId: v.id("users"),
+    toUserId: v.id("users"),
+    amount: v.number(),
+    date: v.string(),
+    note: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const userId = await requireUserId(ctx);
+    await requireMembership(ctx, args.groupId, userId);
+
+    if (!(args.amount > 0)) throw new Error("Amount must be greater than 0");
+    if (args.fromUserId === args.toUserId) {
+      throw new Error("Payer and recipient must be different people");
+    }
+
+    const members = await getGroupMembers(ctx, args.groupId);
+    const memberIds = new Set(members.map((m) => m.userId));
+    if (!memberIds.has(args.fromUserId) || !memberIds.has(args.toUserId)) {
+      throw new Error("Both people must be group members");
+    }
+
+    const note = args.note?.trim();
+    return await ctx.db.insert("groupSettlements", {
+      groupId: args.groupId,
+      fromUserId: args.fromUserId,
+      toUserId: args.toUserId,
+      amount: Math.round(args.amount * 100) / 100,
+      date: args.date,
+      ...(note ? { note } : {}),
+      createdBy: userId,
+    });
+  },
+});
+
+export const removeSettlement = mutation({
+  args: { settlementId: v.id("groupSettlements") },
+  handler: async (ctx, { settlementId }) => {
+    const userId = await requireUserId(ctx);
+    const settlement = await ctx.db.get(settlementId);
+    if (!settlement) throw new Error("Settlement not found");
+
+    const membership = await requireMembership(ctx, settlement.groupId, userId);
+    const allowed =
+      settlement.createdBy === userId ||
+      settlement.fromUserId === userId ||
+      settlement.toUserId === userId ||
+      membership.role === "owner";
+    if (!allowed) throw new Error("You cannot delete this settlement");
+
+    await ctx.db.delete(settlementId);
   },
 });
 
@@ -819,3 +965,27 @@ export const removeExpense = mutation({
     await ctx.db.delete(expenseId);
   },
 });
+
+function uniqueUserIds(ids: Id<"users">[]): Id<"users">[] {
+  const seen = new Set<string>();
+  const out: Id<"users">[] = [];
+  for (const id of ids) {
+    if (seen.has(id)) continue;
+    seen.add(id);
+    out.push(id);
+  }
+  return out;
+}
+
+function uniqueSplitRows<T extends { userId: Id<"users"> }>(rows: T[]): T[] {
+  const seen = new Set<string>();
+  const out: T[] = [];
+  for (const row of rows) {
+    if (seen.has(row.userId)) {
+      throw new Error("Each person can only appear once in a split");
+    }
+    seen.add(row.userId);
+    out.push(row);
+  }
+  return out;
+}
