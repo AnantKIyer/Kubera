@@ -15,6 +15,9 @@ function isActive(pathname: string, href: string) {
   if (href === "/accounts") {
     return pathname.startsWith("/accounts") || pathname.startsWith("/emis");
   }
+  if (href === "/groups") {
+    return pathname.startsWith("/groups");
+  }
   return href === "/" ? pathname === "/" : pathname.startsWith(href);
 }
 
@@ -29,7 +32,7 @@ export function Sidebar() {
   const pathname = usePathname();
 
   return (
-    <aside className="fixed inset-y-0 left-0 z-30 hidden w-64 flex-col border-r border-border/60 bg-card/40 backdrop-blur-xl lg:flex">
+    <aside className="fixed inset-y-0 left-0 z-30 hidden w-64 flex-col border-r border-border bg-card/90 backdrop-blur-xl lg:flex">
       <div className="flex h-16 items-center px-6">
         <Logo />
       </div>
@@ -74,7 +77,7 @@ export function MobileNav() {
 
   return (
     <>
-      <nav className="fixed inset-x-0 bottom-0 z-30 border-t border-border bg-card/90 pb-safe backdrop-blur-xl lg:hidden">
+      <nav className="fixed inset-x-0 bottom-0 z-30 border-t border-border bg-card pb-safe backdrop-blur-xl lg:hidden">
         <div className="flex">
           {MOBILE_PRIMARY_NAV.map((item) => {
             const active = isActive(pathname, item.href);
@@ -115,7 +118,7 @@ export function MobileNav() {
 
 export function MobileHeader() {
   return (
-    <header className="sticky top-0 z-20 border-b border-border bg-card/80 pt-safe backdrop-blur-xl lg:hidden">
+    <header className="sticky top-0 z-20 border-b border-border bg-card pt-safe backdrop-blur-xl lg:hidden">
       <div className="flex h-14 items-center justify-between px-4">
         <Logo />
         <div className="flex items-center gap-2">

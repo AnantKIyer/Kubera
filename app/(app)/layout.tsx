@@ -2,12 +2,14 @@
 
 import { AuthGate } from "@/components/auth-gate";
 import { MobileHeader, MobileNav, Sidebar } from "@/components/layout/sidebar";
+import { PwaIconSync } from "@/components/pwa/pwa-icon-sync";
 import { UserSeeder } from "@/components/user-seeder";
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   return (
     <AuthGate>
       <UserSeeder />
+      <PwaIconSync />
       <div className="min-h-screen">
         <Sidebar />
         <MobileHeader />

@@ -3,6 +3,11 @@ import { mutation, query } from "./_generated/server";
 import { billingCycle } from "./schema";
 import { requireUserId } from "./lib/user";
 import { addBillingPeriod, type BillingCycle } from "./lib/subscriptionDates";
+import {
+  decryptAccounts,
+  decryptSubscriptions,
+  encryptSubscriptionFields,
+} from "./lib/sensitiveFields";
 
 export function monthlyEquivalent(
   amount: number,
@@ -38,14 +43,17 @@ export const list = query({
       ).map((c) => [c._id, c]),
     );
     const accounts = new Map(
-      (await ctx.db
-        .query("accounts")
-        .withIndex("by_user", (q) => q.eq("userId", userId))
-        .collect()
-      ).map((a) => [a._id, a]),
+      (await decryptAccounts(
+        await ctx.db
+          .query("accounts")
+          .withIndex("by_user", (q) => q.eq("userId", userId))
+          .collect(),
+      )).map((a) => [a._id, a]),
     );
 
-    return rows
+    const decryptedRows = await decryptSubscriptions(rows);
+
+    return decryptedRows
       .map((s) => {
         const category = s.categoryId ? categories.get(s.categoryId) : undefined;
         const account = s.accountId ? accounts.get(s.accountId) : undefined;
@@ -100,16 +108,20 @@ export const create = mutation({
   handler: async (ctx, args) => {
     const userId = await requireUserId(ctx);
     if (!(args.amount > 0)) throw new Error("Amount must be greater than 0");
+    const sensitive = await encryptSubscriptionFields({
+      name: args.name.trim(),
+      notes: args.notes?.trim() || null,
+    });
     return await ctx.db.insert("subscriptions", {
       userId,
-      name: args.name.trim(),
+      name: sensitive.name!,
       amount: args.amount,
       billingCycle: args.billingCycle,
       categoryId: args.categoryId,
       accountId: args.accountId,
       nextRenewalDate: args.nextRenewalDate,
       isActive: true,
-      notes: args.notes?.trim() || undefined,
+      notes: sensitive.notes,
     });
   },
 });
@@ -133,7 +145,10 @@ export const update = mutation({
 
     const { id, ...rest } = args;
     const patch: Record<string, unknown> = {};
-    if (rest.name !== undefined) patch.name = rest.name.trim();
+    if (rest.name !== undefined) {
+      const sensitive = await encryptSubscriptionFields({ name: rest.name.trim() });
+      patch.name = sensitive.name;
+    }
     if (rest.amount !== undefined) {
       if (!(rest.amount > 0)) throw new Error("Amount must be greater than 0");
       patch.amount = rest.amount;
@@ -145,7 +160,10 @@ export const update = mutation({
       patch.nextRenewalDate = rest.nextRenewalDate ?? undefined;
     }
     if (rest.isActive !== undefined) patch.isActive = rest.isActive;
-    if (rest.notes !== undefined) patch.notes = rest.notes?.trim() || undefined;
+    if (rest.notes !== undefined) {
+      const sensitive = await encryptSubscriptionFields({ notes: rest.notes?.trim() || null });
+      patch.notes = sensitive.notes;
+    }
     await ctx.db.patch(id, patch);
   },
 });

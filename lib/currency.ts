@@ -21,10 +21,43 @@ export const LOG_CURRENCIES: CurrencyOption[] = [
   { code: "CHF", label: "Swiss Franc", symbol: "CHF" },
 ];
 
+/**
+ * Simplified glyphs for PWA / brand icons (legible at 180px).
+ * Keep in sync with scripts/generate-pwa-icons.mjs.
+ */
+export const ICON_GLYPHS: Record<string, string> = {
+  INR: "₹",
+  USD: "$",
+  EUR: "€",
+  GBP: "£",
+  AED: "د",
+  SGD: "S$",
+  CAD: "C$",
+  AUD: "A$",
+  JPY: "¥",
+  CHF: "Fr",
+};
+
 const symbolByCode = new Map(LOG_CURRENCIES.map((c) => [c.code, c.symbol]));
+const logCurrencyCodes = new Set(LOG_CURRENCIES.map((c) => c.code));
 
 export function getCurrencySymbol(code: string): string {
   return symbolByCode.get(code) ?? code;
+}
+
+/** Glyph used on the PWA app icon for a currency. */
+export function getIconGlyph(code: string): string {
+  return ICON_GLYPHS[code] ?? getCurrencySymbol(code);
+}
+
+export function isLogCurrency(code: string): boolean {
+  return logCurrencyCodes.has(code);
+}
+
+/** Normalize a stored/cookie home currency; invalid values fall back to INR. */
+export function resolveHomeCurrency(code: string | null | undefined): string {
+  if (code && isLogCurrency(code)) return code;
+  return BASE_CURRENCY;
 }
 
 export function isBaseCurrency(code: string): boolean {

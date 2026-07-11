@@ -10,7 +10,10 @@
     "start": "next start",
     "lint": "next lint",
     "convex:codegen": "convex codegen",
-    "setup:auth": "node scripts/setup-convex-auth-env.mjs"
+    "setup:auth": "node scripts/setup-convex-auth-env.mjs",
+    "test:encryption": "node scripts/verify-encryption.mjs",
+    "test:groups": "node scripts/verify-group-balances.mjs",
+    "linear:views": "node scripts/create-linear-project-views.mjs"
   },
   "dependencies": {
     "@auth/core": "^0.41.1",

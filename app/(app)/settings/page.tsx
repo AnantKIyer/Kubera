@@ -14,6 +14,7 @@ import { FormError, FormField, Input } from "@/components/ui/form";
 import { Skeleton } from "@/components/ui/misc";
 import { getUserDisplayName } from "@/lib/user-display";
 import { parseUserError } from "@/lib/errors";
+import { AppIconCurrencyCard } from "@/components/pwa/app-icon-currency-card";
 import { InstallAppCard } from "@/components/pwa/install-app-card";
 
 export default function SettingsPage() {
@@ -65,6 +66,8 @@ export default function SettingsPage() {
 
       <div className="grid max-w-2xl gap-6">
         <InstallAppCard />
+
+        <AppIconCurrencyCard homeCurrency={user.homeCurrency} />
 
         <Card>
           <CardHeader>

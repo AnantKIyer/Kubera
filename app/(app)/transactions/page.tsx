@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/form";
 import { Skeleton, EmptyState, SegmentedControl } from "@/components/ui/misc";
-import { TransactionList } from "@/components/transaction-list";
+import { TransactionList, type TxItem } from "@/components/transaction-list";
 import {
   TransactionForm,
   EditableTransaction,
@@ -30,7 +30,7 @@ export default function TransactionsPage() {
   });
 
   const totals = useMemo(() => {
-    const list = transactions ?? [];
+    const list: TxItem[] = transactions ?? [];
     return {
       income: list.filter((t) => t.type === "income").reduce((s, t) => s + t.amount, 0),
       expense: list.filter((t) => t.type === "expense").reduce((s, t) => s + t.amount, 0),

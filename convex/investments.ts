@@ -2,6 +2,11 @@ import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import { investmentType } from "./schema";
 import { requireUserId } from "./lib/user";
+import {
+  decryptAccounts,
+  decryptInvestments,
+  encryptInvestmentFields,
+} from "./lib/sensitiveFields";
 
 function portfolioValue(investedAmount: number, currentValue?: number | null): number {
   return currentValue ?? investedAmount;
@@ -29,14 +34,17 @@ export const list = query({
     if (args.activeOnly) rows = rows.filter((row) => row.isActive);
 
     const accounts = new Map(
-      (await ctx.db
-        .query("accounts")
-        .withIndex("by_user", (q) => q.eq("userId", userId))
-        .collect()
-      ).map((a) => [a._id, a]),
+      (await decryptAccounts(
+        await ctx.db
+          .query("accounts")
+          .withIndex("by_user", (q) => q.eq("userId", userId))
+          .collect(),
+      )).map((a) => [a._id, a]),
     );
 
-    return rows
+    const decryptedRows = await decryptInvestments(rows);
+
+    return decryptedRows
       .map((row) => {
         const account = row.accountId ? accounts.get(row.accountId) : undefined;
         const value = portfolioValue(row.investedAmount, row.currentValue);
@@ -125,9 +133,14 @@ export const create = mutation({
       if (!account || account.userId !== userId) throw new Error("Account not found");
     }
 
+    const sensitive = await encryptInvestmentFields({
+      name,
+      notes: args.notes?.trim() || null,
+    });
+
     return await ctx.db.insert("investments", {
       userId,
-      name,
+      name: sensitive.name!,
       investmentType: args.investmentType,
       investedAmount: args.investedAmount,
       currentValue: args.currentValue,
@@ -137,7 +150,7 @@ export const create = mutation({
       maturityDate: args.maturityDate,
       interestRate: args.interestRate,
       isActive: true,
-      notes: args.notes?.trim() || undefined,
+      notes: sensitive.notes,
     });
   },
 });
@@ -165,7 +178,10 @@ export const update = mutation({
     const { id, ...rest } = args;
     const patch: Record<string, unknown> = {};
 
-    if (rest.name !== undefined) patch.name = rest.name.trim();
+    if (rest.name !== undefined) {
+      const sensitive = await encryptInvestmentFields({ name: rest.name.trim() });
+      patch.name = sensitive.name;
+    }
     if (rest.investmentType !== undefined) patch.investmentType = rest.investmentType;
     if (rest.investedAmount !== undefined) {
       if (!(rest.investedAmount >= 0)) throw new Error("Invested amount cannot be negative");
@@ -199,7 +215,10 @@ export const update = mutation({
       patch.interestRate = rest.interestRate ?? undefined;
     }
     if (rest.isActive !== undefined) patch.isActive = rest.isActive;
-    if (rest.notes !== undefined) patch.notes = rest.notes?.trim() || undefined;
+    if (rest.notes !== undefined) {
+      const sensitive = await encryptInvestmentFields({ notes: rest.notes?.trim() || null });
+      patch.notes = sensitive.notes;
+    }
 
     await ctx.db.patch(id, patch);
   },
