@@ -43,7 +43,7 @@ export function Modal({
   return createPortal(
     <div className="fixed inset-0 z-50 flex items-end justify-center p-0 sm:items-center sm:p-5">
       <div
-        className="absolute inset-0 bg-background/70 backdrop-blur-[6px] animate-fade-in"
+        className="absolute inset-0 bg-background/80 animate-fade-in"
         onClick={onClose}
         aria-hidden
       />
@@ -84,7 +84,7 @@ export function Modal({
 
         {/* Footer — sticky */}
         {footer && (
-          <div className="shrink-0 border-t border-border/60 bg-card/95 px-5 py-4 backdrop-blur-sm">
+          <div className="shrink-0 border-t border-border/60 bg-card px-5 py-4">
             {footer}
           </div>
         )}

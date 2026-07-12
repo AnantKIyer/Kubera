@@ -29,7 +29,7 @@ export function StatCard({
   return (
     <Card
       className={cn(
-        "relative overflow-hidden p-5 transition-all hover:shadow-soft",
+        "relative overflow-hidden p-5 transition-shadow hover:shadow-soft",
         highlight && "bg-aurora",
       )}
     >

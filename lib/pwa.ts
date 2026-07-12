@@ -28,3 +28,28 @@ declare global {
     beforeinstallprompt: BeforeInstallPromptEvent;
   }
 }
+
+/** localStorage key: user chose to keep using the browser (dismiss install banner). */
+export const PWA_INSTALL_DISMISSED_KEY = "kubera-pwa-install-dismissed";
+
+export function isInstallPromptDismissed(): boolean {
+  if (typeof window === "undefined") return false;
+  try {
+    return localStorage.getItem(PWA_INSTALL_DISMISSED_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
+export function setInstallPromptDismissed(dismissed: boolean): void {
+  if (typeof window === "undefined") return;
+  try {
+    if (dismissed) {
+      localStorage.setItem(PWA_INSTALL_DISMISSED_KEY, "1");
+    } else {
+      localStorage.removeItem(PWA_INSTALL_DISMISSED_KEY);
+    }
+  } catch {
+    // Ignore quota / private mode failures
+  }
+}
