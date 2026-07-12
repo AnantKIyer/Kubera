@@ -27,16 +27,28 @@ export default function TransactionsPage() {
   const transactions = useQuery(api.transactions.list, {
     type: filter === "all" ? undefined : filter,
     search: search.trim() || undefined,
+    limit: 100,
+  });
+
+  const summary = useQuery(api.transactions.summary, {
+    type: filter === "all" ? undefined : filter,
   });
 
   const totals = useMemo(() => {
+    if (summary) {
+      return {
+        income: summary.income,
+        expense: summary.expense,
+        count: summary.count,
+      };
+    }
     const list: TxItem[] = transactions ?? [];
     return {
       income: list.filter((t) => t.type === "income").reduce((s, t) => s + t.amount, 0),
       expense: list.filter((t) => t.type === "expense").reduce((s, t) => s + t.amount, 0),
       count: list.length,
     };
-  }, [transactions]);
+  }, [summary, transactions]);
 
   const openEdit = (t: EditableTransaction) => {
     setEditing(t);
@@ -125,7 +137,14 @@ export default function TransactionsPage() {
               action={!search && <Button onClick={openNew}>Add transaction</Button>}
             />
           ) : (
-            <TransactionList transactions={transactions} onEdit={openEdit} groupByDate />
+            <>
+              <TransactionList transactions={transactions} onEdit={openEdit} groupByDate />
+              {transactions.length >= 100 && !search.trim() && (
+                <p className="mt-4 text-center text-xs text-muted-foreground">
+                  Showing the latest 100 transactions. Use search to find older ones.
+                </p>
+              )}
+            </>
           )}
         </CardContent>
       </Card>

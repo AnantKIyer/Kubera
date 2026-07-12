@@ -1,6 +1,7 @@
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import { requireUserId } from "./lib/user";
+import { loadTransactionsInDateRange, monthEnd, monthStart } from "./lib/txQuery";
 
 export const listByMonth = query({
   args: { month: v.string() },
@@ -20,11 +21,13 @@ export const listByMonth = query({
     );
 
     const monthTx = (
-      await ctx.db
-        .query("transactions")
-        .withIndex("by_user", (q) => q.eq("userId", userId))
-        .collect()
-    ).filter((tx) => tx.type === "expense" && tx.date.slice(0, 7) === args.month);
+      await loadTransactionsInDateRange(
+        ctx,
+        userId,
+        monthStart(args.month),
+        monthEnd(args.month),
+      )
+    ).filter((tx) => tx.type === "expense");
 
     const spentByCategory = new Map<string, number>();
     for (const tx of monthTx) {

@@ -174,8 +174,21 @@ export default defineSchema({
     .index("by_user", ["userId"])
     .index("by_user_date", ["userId", "date"])
     .index("by_user_type", ["userId", "type"])
+    .index("by_user_type_date", ["userId", "type", "date"])
     .index("by_user_category", ["userId", "categoryId"])
     .index("by_user_account", ["userId", "accountId"]),
+
+  /** Cached FX quotes (Frankfurter) — keyed by pair + requested date path. */
+  exchangeRates: defineTable({
+    from: v.string(),
+    to: v.string(),
+    /** Requested path date: "latest" or YYYY-MM-DD */
+    requestDate: v.string(),
+    rate: v.number(),
+    /** Actual ECB rate date returned by the provider */
+    rateDate: v.string(),
+    fetchedAt: v.number(),
+  }).index("by_pair_request", ["from", "to", "requestDate"]),
 
   budgets: defineTable({
     userId: v.optional(v.id("users")),

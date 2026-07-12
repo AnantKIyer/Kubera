@@ -124,17 +124,34 @@ async function getGroupExpensesAndSplits(ctx: DbCtx, groupId: Id<"expenseGroups"
     .query("groupExpenses")
     .withIndex("by_group", (q) => q.eq("groupId", groupId))
     .collect();
-  const splits = (
-    await Promise.all(
-      expenses.map((e) =>
-        ctx.db
-          .query("groupExpenseSplits")
-          .withIndex("by_expense", (q) => q.eq("expenseId", e._id))
-          .collect(),
-      ),
-    )
-  ).flat();
+  // Single index scan — avoid N+1 per-expense split queries.
+  const splits = await ctx.db
+    .query("groupExpenseSplits")
+    .withIndex("by_group", (q) => q.eq("groupId", groupId))
+    .collect();
   return { expenses, splits };
+}
+
+async function assertMemberNetSettled(
+  ctx: DbCtx,
+  groupId: Id<"expenseGroups">,
+  memberUserId: Id<"users">,
+) {
+  const members = await getGroupMembers(ctx, groupId);
+  const { expenses, splits } = await getGroupExpensesAndSplits(ctx, groupId);
+  const settlements = await getGroupSettlements(ctx, groupId);
+  const balances = computeMemberBalances(
+    expenses,
+    splits,
+    members.map((m) => m.userId),
+    settlements,
+  );
+  const net = balances.find((b) => b.userId === memberUserId)?.net ?? 0;
+  if (Math.abs(net) > 0.009) {
+    throw new Error(
+      "Settle outstanding balances for this member before removing them from the group.",
+    );
+  }
 }
 
 export const listMyGroups = query({
@@ -299,16 +316,10 @@ export const getDetail = query({
       .collect();
     rawExpenses.sort((a, b) => (a.date === b.date ? b._creationTime - a._creationTime : b.date.localeCompare(a.date)));
 
-    const allSplits = (
-      await Promise.all(
-        rawExpenses.map((e) =>
-          ctx.db
-            .query("groupExpenseSplits")
-            .withIndex("by_expense", (q) => q.eq("expenseId", e._id))
-            .collect(),
-        ),
-      )
-    ).flat();
+    const allSplits = await ctx.db
+      .query("groupExpenseSplits")
+      .withIndex("by_group", (q) => q.eq("groupId", groupId))
+      .collect();
 
     const rawSettlements = await getGroupSettlements(ctx, groupId);
     rawSettlements.sort((a, b) =>
@@ -727,6 +738,7 @@ export const removeMember = mutation({
 
     const target = await getMembership(ctx, groupId, memberUserId);
     if (!target) throw new Error("Member not found");
+    await assertMemberNetSettled(ctx, groupId, memberUserId);
     await ctx.db.delete(target._id);
   },
 });
@@ -739,6 +751,7 @@ export const leave = mutation({
     if (membership.role === "owner") {
       throw new Error("Owners cannot leave — delete the group or transfer ownership first");
     }
+    await assertMemberNetSettled(ctx, groupId, userId);
     await ctx.db.delete(membership._id);
   },
 });
@@ -756,14 +769,12 @@ export const remove = mutation({
       .query("groupExpenses")
       .withIndex("by_group", (q) => q.eq("groupId", groupId))
       .collect();
-    for (const expense of expenses) {
-      const splits = await ctx.db
-        .query("groupExpenseSplits")
-        .withIndex("by_expense", (q) => q.eq("expenseId", expense._id))
-        .collect();
-      for (const split of splits) await ctx.db.delete(split._id);
-      await ctx.db.delete(expense._id);
-    }
+    const splits = await ctx.db
+      .query("groupExpenseSplits")
+      .withIndex("by_group", (q) => q.eq("groupId", groupId))
+      .collect();
+    for (const split of splits) await ctx.db.delete(split._id);
+    for (const expense of expenses) await ctx.db.delete(expense._id);
 
     const members = await getGroupMembers(ctx, groupId);
     for (const m of members) await ctx.db.delete(m._id);

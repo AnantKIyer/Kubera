@@ -9,6 +9,13 @@ import {
   creditUtilized,
 } from "./lib/credit";
 import { decryptAccounts } from "./lib/sensitiveFields";
+import {
+  currentMonthKey,
+  loadTransactionsInDateRange,
+  monthEnd,
+  monthStart,
+  shiftMonthKey,
+} from "./lib/txQuery";
 
 function portfolioValue(investedAmount: number, currentValue?: number | null): number {
   return currentValue ?? investedAmount;
@@ -25,12 +32,6 @@ type CategoryTotal = {
 function monthLabel(month: string): string {
   const [year, m] = month.split("-").map(Number);
   return new Date(year, m - 1, 1).toLocaleDateString("en-US", { month: "short" });
-}
-
-function shiftMonthKey(month: string, delta: number): string {
-  const [y, m] = month.split("-").map(Number);
-  const d = new Date(y, m - 1 + delta, 1);
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
 }
 
 function sumInMonth(
@@ -95,10 +96,21 @@ export const overview = query({
   },
   handler: async (ctx, args) => {
     const userId = await requireUserId(ctx);
-    const all = await ctx.db
-      .query("transactions")
-      .withIndex("by_user", (q) => q.eq("userId", userId))
-      .collect();
+    const months = Math.min(Math.max(args.months ?? 6, 1), 24);
+    const now = new Date();
+    const buckets: { key: string; label: string; income: number; expense: number }[] = [];
+    for (let i = months - 1; i >= 0; i--) {
+      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+      buckets.push({ key, label: monthLabel(key), income: 0, expense: 0 });
+    }
+
+    const rangeStart = monthStart(buckets[0].key);
+    const today = new Date().toISOString().slice(0, 10);
+    const rangeEnd = args.end && args.end > today ? args.end : today;
+
+    // Always load the full trend window; KPI totals may still filter to args.start/end.
+    const all = await loadTransactionsInDateRange(ctx, userId, rangeStart, rangeEnd);
     const categories = new Map(
       (await ctx.db
         .query("categories")
@@ -146,14 +158,6 @@ export const overview = query({
         })
         .sort((a, b) => b.total - a.total);
 
-    const months = args.months ?? 6;
-    const now = new Date();
-    const buckets: { key: string; label: string; income: number; expense: number }[] = [];
-    for (let i = months - 1; i >= 0; i--) {
-      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
-      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
-      buckets.push({ key, label: monthLabel(key), income: 0, expense: 0 });
-    }
     const bucketIndex = new Map(buckets.map((b, i) => [b.key, i]));
     for (const tx of all) {
       const key = tx.date.slice(0, 7);
@@ -193,15 +197,17 @@ export const insights = query({
   handler: async (ctx, args) => {
     const userId = await requireUserId(ctx);
     const now = new Date();
-    const currentMonth =
-      args.month ??
-      `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+    const currentMonth = args.month ?? currentMonthKey(now);
     const lastMonth = shiftMonthKey(currentMonth, -1);
 
-    const all = await ctx.db
-      .query("transactions")
-      .withIndex("by_user", (q) => q.eq("userId", userId))
-      .collect();
+    // Only two calendar months of txs for MoM + account flows (not full history).
+    const monthWindow = await loadTransactionsInDateRange(
+      ctx,
+      userId,
+      monthStart(lastMonth),
+      monthEnd(currentMonth),
+    );
+
     const categories = new Map(
       (await ctx.db
         .query("categories")
@@ -216,15 +222,15 @@ export const insights = query({
         .collect(),
     );
 
-    const cur = sumInMonth(all, currentMonth);
-    const prev = sumInMonth(all, lastMonth);
+    const cur = sumInMonth(monthWindow, currentMonth);
+    const prev = sumInMonth(monthWindow, lastMonth);
     const curBalance = cur.income - cur.expense;
     const prevBalance = prev.income - prev.expense;
     const curSavingsRate = cur.income > 0 ? curBalance / cur.income : 0;
     const prevSavingsRate = prev.income > 0 ? prevBalance / prev.income : 0;
 
-    const curInvestment = investmentTotals(all, categories, currentMonth);
-    const prevInvestment = investmentTotals(all, categories, lastMonth);
+    const curInvestment = investmentTotals(monthWindow, categories, currentMonth);
+    const prevInvestment = investmentTotals(monthWindow, categories, lastMonth);
 
     const comparison = {
       month: currentMonth,
@@ -241,9 +247,7 @@ export const insights = query({
     // End-of-month projection (only meaningful for the current calendar month).
     const [y, m] = currentMonth.split("-").map(Number);
     const daysInMonth = new Date(y, m, 0).getDate();
-    const isCurrentCalendarMonth =
-      currentMonth ===
-      `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+    const isCurrentCalendarMonth = currentMonth === currentMonthKey(now);
     const dayOfMonth = isCurrentCalendarMonth ? now.getDate() : daysInMonth;
     const pace = dayOfMonth > 0 ? dayOfMonth / daysInMonth : 1;
 
@@ -268,11 +272,11 @@ export const insights = query({
       },
     };
 
-    // Per-account in/out for the selected month.
+    // Per-account in/out for the selected month (from month window only).
     const accountFlows = accounts.map((acc) => {
       let income = 0;
       let expense = 0;
-      for (const tx of all) {
+      for (const tx of monthWindow) {
         if (tx.accountId !== acc._id) continue;
         if (tx.date.slice(0, 7) !== currentMonth) continue;
         if (tx.type === "income") income += tx.amount;
@@ -314,18 +318,25 @@ export const insights = query({
     const creditAccounts = accounts.filter((a) => a.type === "credit" && a.isActive !== false);
     let creditLimitTotal = 0;
     let creditUtilizedTotal = 0;
-    const creditCardDetails = creditAccounts.map((acc) => {
+    const creditCardDetails = [];
+    for (const acc of creditAccounts) {
+      // Lifetime utilization: scan only this account's txs (not full user history).
+      const accountTxs = await ctx.db
+        .query("transactions")
+        .withIndex("by_user_account", (q) =>
+          q.eq("userId", userId).eq("accountId", acc._id),
+        )
+        .collect();
       let expense = 0;
       let income = 0;
-      for (const tx of all) {
-        if (tx.accountId !== acc._id) continue;
+      for (const tx of accountTxs) {
         if (tx.type === "expense") expense += tx.amount;
         else income += tx.amount;
       }
       const utilized = creditUtilized(acc.initialUtilized, expense, income);
       creditUtilizedTotal += utilized;
       if (acc.creditLimit != null) creditLimitTotal += acc.creditLimit;
-      return {
+      creditCardDetails.push({
         id: acc._id,
         name: acc.name,
         institution: acc.institution ?? null,
@@ -335,8 +346,9 @@ export const insights = query({
         utilized,
         available: creditAvailable(acc.creditLimit, utilized),
         utilizationPct: creditUtilizationPct(acc.creditLimit, utilized),
-      };
-    }).sort((a, b) => b.utilized - a.utilized);
+      });
+    }
+    creditCardDetails.sort((a, b) => b.utilized - a.utilized);
 
     const activeAccounts = accounts.filter((a) => a.isActive !== false);
     const bankAccounts = activeAccounts.filter((a) => a.type === "bank");

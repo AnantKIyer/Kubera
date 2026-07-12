@@ -28,6 +28,7 @@ import type * as lib_retrieveAccount from "../lib/retrieveAccount.js";
 import type * as lib_sensitiveFields from "../lib/sensitiveFields.js";
 import type * as lib_shareId from "../lib/shareId.js";
 import type * as lib_subscriptionDates from "../lib/subscriptionDates.js";
+import type * as lib_txQuery from "../lib/txQuery.js";
 import type * as lib_user from "../lib/user.js";
 import type * as migrations from "../migrations.js";
 import type * as providers_kuberaPassword from "../providers/kuberaPassword.js";
@@ -64,6 +65,7 @@ declare const fullApi: ApiFromModules<{
   "lib/sensitiveFields": typeof lib_sensitiveFields;
   "lib/shareId": typeof lib_shareId;
   "lib/subscriptionDates": typeof lib_subscriptionDates;
+  "lib/txQuery": typeof lib_txQuery;
   "lib/user": typeof lib_user;
   migrations: typeof migrations;
   "providers/kuberaPassword": typeof providers_kuberaPassword;

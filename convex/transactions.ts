@@ -7,6 +7,12 @@ import { addBillingPeriod } from "./lib/subscriptionDates";
 import { buildEmiPaymentPatch, clampInstallmentDate, getExtraPaymentMessage, inferPastLoanSchedule, resolveLoanTerms } from "./lib/emi";
 import { normalizeCurrencyFields } from "./lib/currency";
 import { decryptAccounts, decryptTransactions, encryptEmiFields, encryptSubscriptionFields, encryptTransactionFields } from "./lib/sensitiveFields";
+import {
+  clampTxLimit,
+  loadRecentTransactions,
+  loadTransactionsInDateRange,
+  MAX_TX_SEARCH_SCAN,
+} from "./lib/txQuery";
 
 const currencyFields = {
   originalAmount: v.optional(v.union(v.number(), v.null())),
@@ -57,38 +63,32 @@ export const list = query({
   },
   handler: async (ctx, args) => {
     const userId = await requireUserId(ctx);
+    const limit = clampTxLimit(args.limit);
+    const searchTerm = args.search?.trim();
+
     let rows: Doc<"transactions">[];
 
-    if (args.type) {
-      rows = await ctx.db
-        .query("transactions")
-        .withIndex("by_user_type", (q) => q.eq("userId", userId).eq("type", args.type!))
-        .collect();
-    } else if (args.accountId) {
-      rows = await ctx.db
-        .query("transactions")
-        .withIndex("by_user_account", (q) =>
-          q.eq("userId", userId).eq("accountId", args.accountId!),
-        )
-        .collect();
+    if (searchTerm) {
+      // Search scans a bounded newest-first window, then filters in memory.
+      const scan = await loadRecentTransactions(ctx, userId, {
+        limit: Math.min(MAX_TX_SEARCH_SCAN, Math.max(limit * 8, 200)),
+        type: args.type,
+        startDate: args.startDate,
+        endDate: args.endDate,
+        accountId: args.accountId,
+        categoryId: args.categoryId,
+      });
+      rows = scan;
     } else {
-      rows = await ctx.db
-        .query("transactions")
-        .withIndex("by_user", (q) => q.eq("userId", userId))
-        .collect();
+      rows = await loadRecentTransactions(ctx, userId, {
+        limit,
+        type: args.type,
+        startDate: args.startDate,
+        endDate: args.endDate,
+        accountId: args.accountId,
+        categoryId: args.categoryId,
+      });
     }
-
-    rows = rows.filter((tx) => {
-      if (args.categoryId && tx.categoryId !== args.categoryId) return false;
-      if (args.accountId && tx.accountId !== args.accountId) return false;
-      if (args.startDate && tx.date < args.startDate) return false;
-      if (args.endDate && tx.date > args.endDate) return false;
-      return true;
-    });
-
-    rows.sort((a, b) =>
-      a.date === b.date ? b._creationTime - a._creationTime : b.date < a.date ? -1 : 1,
-    );
 
     const categories = new Map(
       (await ctx.db
@@ -108,8 +108,8 @@ export const list = query({
 
     let enriched: EnrichedTransaction[];
 
-    if (args.search) {
-      const term = args.search.toLowerCase();
+    if (searchTerm) {
+      const term = searchTerm.toLowerCase();
       const decryptedForSearch = await decryptTransactions(rows);
       enriched = decryptedForSearch
         .map((tx) => enrich(tx, categories, accounts))
@@ -119,14 +119,46 @@ export const list = query({
             tx.categoryName?.toLowerCase().includes(term) ||
             tx.accountName?.toLowerCase().includes(term) ||
             tx.amount.toString().includes(term),
-        );
+        )
+        .slice(0, limit);
     } else {
       const decryptedRows = await decryptTransactions(rows);
       enriched = decryptedRows.map((tx) => enrich(tx, categories, accounts));
     }
 
-    if (args.limit) enriched = enriched.slice(0, args.limit);
     return enriched;
+  },
+});
+
+/** Lightweight totals for a date window — no description decrypt. */
+export const summary = query({
+  args: {
+    type: v.optional(v.union(v.literal("income"), v.literal("expense"))),
+    startDate: v.optional(v.string()),
+    endDate: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const userId = await requireUserId(ctx);
+    const end = args.endDate ?? new Date().toISOString().slice(0, 10);
+    const start =
+      args.startDate ??
+      (() => {
+        const d = new Date();
+        d.setFullYear(d.getFullYear() - 1);
+        return d.toISOString().slice(0, 10);
+      })();
+
+    const rows = await loadTransactionsInDateRange(ctx, userId, start, end);
+    let income = 0;
+    let expense = 0;
+    let count = 0;
+    for (const tx of rows) {
+      if (args.type && tx.type !== args.type) continue;
+      count++;
+      if (tx.type === "income") income += tx.amount;
+      else expense += tx.amount;
+    }
+    return { income, expense, count, startDate: start, endDate: end };
   },
 });
 

@@ -76,25 +76,17 @@ export const list = query({
       )).map((a) => [a._id, a]),
     );
 
-    const transactions = await ctx.db
-      .query("transactions")
-      .withIndex("by_user", (q) => q.eq("userId", userId))
-      .collect();
-
-    const paidByEmi = new Map<string, number>();
-    for (const tx of transactions) {
-      if (tx.emiId && tx.type === "expense") {
-        paidByEmi.set(tx.emiId, (paidByEmi.get(tx.emiId) ?? 0) + tx.amount);
-      }
-    }
-
+    // Prefer denormalized EMI payment fields — avoid full transaction history scans.
     const decryptedRows = await decryptEmis(rows);
 
     return decryptedRows
       .map((e) => {
         const category = e.categoryId ? categories.get(e.categoryId) : undefined;
         const account = e.accountId ? accounts.get(e.accountId) : undefined;
-        return enrichEmi(e, paidByEmi.get(e._id) ?? 0, category, account);
+        const expected = expectedEmiForLoan(e);
+        const totalPaid =
+          (e.paidInstallments ?? 0) * expected + (e.extraPaidTotal ?? 0);
+        return enrichEmi(e, totalPaid, category, account);
       })
       .sort((a, b) => b.amount - a.amount);
   },
