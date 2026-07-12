@@ -39,7 +39,7 @@ export function MobileMoreSheet({ open, onClose }: MobileMoreSheetProps) {
       <button
         type="button"
         aria-label="Close menu"
-        className="absolute inset-0 bg-background/60 backdrop-blur-[2px] animate-fade-in"
+        className="absolute inset-0 bg-background/80 animate-fade-in"
         onClick={onClose}
       />
       <div

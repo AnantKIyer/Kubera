@@ -79,6 +79,7 @@ export function TrendChart({ data }: { data: Point[] }) {
           fill="url(#incomeFill)"
           dot={false}
           activeDot={{ r: 4 }}
+          isAnimationActive={false}
         />
         <Area
           type="monotone"
@@ -88,6 +89,7 @@ export function TrendChart({ data }: { data: Point[] }) {
           fill="url(#expenseFill)"
           dot={false}
           activeDot={{ r: 4 }}
+          isAnimationActive={false}
         />
       </AreaChart>
     </ResponsiveContainer>

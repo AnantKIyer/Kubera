@@ -82,6 +82,7 @@ function DonutRing({
             outerRadius={outer}
             paddingAngle={data.length > 1 ? 2 : 0}
             stroke="none"
+            isAnimationActive={false}
           >
             {data.map((d) => (
               <Cell key={d.id} fill={d.color} />
