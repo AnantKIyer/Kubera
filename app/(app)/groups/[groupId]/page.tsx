@@ -61,22 +61,23 @@ function Toggle({
       role="switch"
       aria-checked={checked}
       onClick={() => onChange(!checked)}
-      className="inline-flex items-center gap-2 text-sm"
+      className="inline-flex shrink-0 items-center gap-2 rounded-md text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-card"
     >
+      <span className="whitespace-nowrap text-muted-foreground">{label}</span>
       <span
+        aria-hidden
         className={cn(
-          "relative h-5 w-9 rounded-full transition-colors",
-          checked ? "bg-primary" : "bg-muted",
+          "relative inline-block h-5 w-9 shrink-0 rounded-full transition-colors",
+          checked ? "bg-primary" : "bg-input",
         )}
       >
         <span
           className={cn(
-            "absolute top-0.5 h-4 w-4 rounded-full bg-white shadow transition-transform",
-            checked ? "translate-x-4" : "translate-x-0.5",
+            "pointer-events-none absolute left-0.5 top-0.5 block h-4 w-4 rounded-full bg-background shadow-sm ring-1 ring-black/10 transition-transform dark:ring-white/10",
+            checked && "translate-x-4",
           )}
         />
       </span>
-      <span className="text-muted-foreground">{label}</span>
     </button>
   );
 }
@@ -500,8 +501,8 @@ export default function GroupDetailPage() {
 
       {/* Who owes whom (my view) */}
       <Card className="mb-4">
-        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-3">
-          <CardTitle className="text-base">
+        <CardHeader className="flex flex-row items-center justify-between gap-3 space-y-0 pb-3">
+          <CardTitle className="min-w-0 text-base">
             {settlements.length > 0 ? "Settlements" : "All settled"}
           </CardTitle>
           <Toggle
