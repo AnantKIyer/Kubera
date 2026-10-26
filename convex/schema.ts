@@ -1,5 +1,4 @@
 import { defineSchema, defineTable } from "convex/server";
-import { authTables } from "@convex-dev/auth/server";
 import { v } from "convex/values";
 
 export const categoryKind = v.union(
@@ -36,9 +35,9 @@ export const investmentType = v.union(
 );
 
 export default defineSchema({
-  ...authTables,
-
   users: defineTable({
+    /** Clerk user id (identity.subject) */
+    clerkId: v.optional(v.string()),
     name: v.optional(v.string()),
     image: v.optional(v.string()),
     email: v.optional(v.string()),
@@ -52,7 +51,8 @@ export default defineSchema({
   })
     .index("email", ["email"])
     .index("phone", ["phone"])
-    .index("username", ["username"]),
+    .index("username", ["username"])
+    .index("by_clerkId", ["clerkId"]),
 
   /** Atomic username reservation — prevents duplicate sign-ups under concurrency */
   usernames: defineTable({
@@ -82,7 +82,7 @@ export default defineSchema({
     isActive: v.optional(v.boolean()),
     /** Total credit limit (credit cards only) */
     creditLimit: v.optional(v.number()),
-    /** Current balance (bank accounts) */
+    /** Opening balance snapshot (bank accounts) — ledger applies transactions on top */
     currentBalance: v.optional(v.number()),
     /** Debit / UPI linked to a bank account */
     linkedBankAccountId: v.optional(v.id("accounts")),
@@ -155,7 +155,7 @@ export default defineSchema({
 
   transactions: defineTable({
     userId: v.optional(v.id("users")),
-    type: v.union(v.literal("income"), v.literal("expense")),
+    type: v.union(v.literal("income"), v.literal("expense"), v.literal("transfer")),
     /** Amount in base currency (INR) used for stats and balances */
     amount: v.number(),
     /** Original amount when logged in a foreign currency */
@@ -166,7 +166,10 @@ export default defineSchema({
     exchangeRate: v.optional(v.number()),
     description: v.optional(v.string()),
     categoryId: v.optional(v.id("categories")),
+    /** Source account (income/expense account, or transfer from) */
     accountId: v.optional(v.id("accounts")),
+    /** Destination account when type is transfer */
+    transferToAccountId: v.optional(v.id("accounts")),
     subscriptionId: v.optional(v.id("subscriptions")),
     emiId: v.optional(v.id("emis")),
     date: v.string(),
@@ -175,7 +178,9 @@ export default defineSchema({
     .index("by_user_date", ["userId", "date"])
     .index("by_user_type", ["userId", "type"])
     .index("by_user_category", ["userId", "categoryId"])
-    .index("by_user_account", ["userId", "accountId"]),
+    .index("by_user_account", ["userId", "accountId"])
+    .index("by_user_subscription", ["userId", "subscriptionId"])
+    .index("by_user_emi", ["userId", "emiId"]),
 
   budgets: defineTable({
     userId: v.optional(v.id("users")),
@@ -202,6 +207,8 @@ export default defineSchema({
     groupId: v.id("expenseGroups"),
     userId: v.id("users"),
     role: v.union(v.literal("owner"), v.literal("member")),
+    /** Soft-leave — history kept for balances; null/undefined means active */
+    leftAt: v.optional(v.number()),
   })
     .index("by_group", ["groupId"])
     .index("by_user", ["userId"])

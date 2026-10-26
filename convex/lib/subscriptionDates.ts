@@ -1,32 +1,40 @@
-import { billingCycle } from "../schema";
-
 export type BillingCycle = "monthly" | "quarterly" | "half-yearly" | "yearly";
+
+/** Days in month for year/month (month is 1–12). */
+export function daysInMonth(year: number, month: number): number {
+  return new Date(year, month, 0).getDate();
+}
+
+/**
+ * Add calendar months without overflowing end-of-month dates.
+ * Jan 31 + 1 month → Feb 28/29 (not March).
+ */
+export function addCalendarMonths(isoDate: string, months: number): string {
+  const [y, m, d] = isoDate.split("-").map(Number);
+  if (!y || !m || !d) throw new Error("Invalid date");
+  const total = y * 12 + (m - 1) + months;
+  const ty = Math.floor(total / 12);
+  const tm = ((total % 12) + 12) % 12; // 0–11
+  const day = Math.min(d, daysInMonth(ty, tm + 1));
+  return `${ty}-${String(tm + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+}
+
+function monthsForCycle(cycle: BillingCycle): number {
+  switch (cycle) {
+    case "monthly":
+      return 1;
+    case "quarterly":
+      return 3;
+    case "half-yearly":
+      return 6;
+    case "yearly":
+      return 12;
+  }
+}
 
 /** Add one billing period to an ISO date (YYYY-MM-DD). */
 export function addBillingPeriod(isoDate: string, cycle: BillingCycle): string {
-  const [y, m, d] = isoDate.split("-").map(Number);
-  const date = new Date(y, m - 1, d);
-  switch (cycle) {
-    case "monthly":
-      date.setMonth(date.getMonth() + 1);
-      break;
-    case "quarterly":
-      date.setMonth(date.getMonth() + 3);
-      break;
-    case "half-yearly":
-      date.setMonth(date.getMonth() + 6);
-      break;
-    case "yearly":
-      date.setFullYear(date.getFullYear() + 1);
-      break;
-  }
-  return toISODate(date);
-}
-
-function toISODate(date: Date): string {
-  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(
-    date.getDate(),
-  ).padStart(2, "0")}`;
+  return addCalendarMonths(isoDate, monthsForCycle(cycle));
 }
 
 export function isBillingCycle(value: string): value is BillingCycle {

@@ -1,4 +1,4 @@
-import { addBillingPeriod } from "./subscriptionDates";
+import { addCalendarMonths } from "./subscriptionDates";
 
 function parseISODate(iso: string): Date {
   const [y, m, d] = iso.split("-").map(Number);
@@ -12,8 +12,7 @@ function toISODate(date: Date): string {
 }
 
 export function addMonthsToIso(iso: string, months: number): string {
-  const [y, m, d] = iso.split("-").map(Number);
-  return toISODate(new Date(y, m - 1 + months, d));
+  return addCalendarMonths(iso, months);
 }
 
 export function inferPastLoanSchedule(loanDate: string, tenure?: number) {
@@ -152,27 +151,51 @@ export function analyzeEmiPayment(paidAmount: number, expectedEmi: number) {
   if (!(expectedEmi > 0)) {
     return {
       expectedEmi: paidAmount,
-      installmentsCovered: 1,
+      installmentsCovered: paidAmount > 0 ? 1 : 0,
       extraAmount: 0,
+      shortfall: 0,
       isExtra: false,
       isUnderpaid: false,
     };
   }
 
-  const fullBlocks = Math.floor(paidAmount / expectedEmi);
-  const installmentsCovered = fullBlocks > 0 ? fullBlocks : paidAmount > 0 ? 1 : 0;
-  const extraAmount =
-    fullBlocks > 0
-      ? Math.round((paidAmount - fullBlocks * expectedEmi) * 100) / 100
-      : Math.max(0, Math.round((paidAmount - expectedEmi) * 100) / 100);
+  const fullBlocks = Math.floor(paidAmount / expectedEmi + 1e-9);
+  const installmentsCovered = fullBlocks;
+  const remainder = Math.round((paidAmount - fullBlocks * expectedEmi) * 100) / 100;
+  const isUnderpaid = paidAmount > 0 && paidAmount < expectedEmi;
+  const extraAmount = fullBlocks > 0 ? Math.max(0, remainder) : 0;
+  const shortfall = isUnderpaid
+    ? Math.round((expectedEmi - paidAmount) * 100) / 100
+    : 0;
 
   return {
     expectedEmi,
     installmentsCovered,
     extraAmount,
+    shortfall,
     isExtra: extraAmount > 0,
-    isUnderpaid: paidAmount > 0 && paidAmount < expectedEmi,
+    isUnderpaid,
   };
+}
+
+/** Reducing-balance amortization: apply payments interest-then-principal. */
+export function remainingPrincipalAfterPayments(
+  principal: number,
+  annualRatePercent: number,
+  payments: { amount: number }[],
+): number {
+  if (!(principal > 0)) return 0;
+  let remaining = principal;
+  const r = annualRatePercent > 0 ? annualRatePercent / 12 / 100 : 0;
+
+  for (const payment of payments) {
+    if (!(payment.amount > 0) || remaining <= 0) continue;
+    const interest = r > 0 ? Math.round(remaining * r * 100) / 100 : 0;
+    const towardPrincipal = Math.max(0, payment.amount - interest);
+    remaining = Math.max(0, Math.round((remaining - towardPrincipal) * 100) / 100);
+  }
+
+  return remaining;
 }
 
 export function getExtraPaymentMessage(extraAmount: number): string {
@@ -227,6 +250,8 @@ export function buildEmiPaymentPatch(
     extraPaidTotal?: number;
     tenureMonths?: number;
     totalInstallments?: number;
+    nextDebitDate?: string;
+    loanDate?: string;
     accountId?: string;
     categoryId?: string;
   },
@@ -241,8 +266,16 @@ export function buildEmiPaymentPatch(
   const analysis = analyzeEmiPayment(paidAmount, expected);
   const paid = (emi.paidInstallments ?? 0) + analysis.installmentsCovered;
 
+  const anchor =
+    emi.nextDebitDate ??
+    (emi.loanDate ? addMonthsToIso(emi.loanDate, 1) : paymentDate);
+  const nextDebitDate =
+    analysis.installmentsCovered > 0
+      ? addMonthsToIso(anchor, analysis.installmentsCovered)
+      : emi.nextDebitDate ?? anchor;
+
   const patch: Record<string, unknown> = {
-    nextDebitDate: addBillingPeriod(paymentDate, "monthly"),
+    nextDebitDate,
     amount: expected,
     expectedEmiAmount: expected,
     isActive: true,
