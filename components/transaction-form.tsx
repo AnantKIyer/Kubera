@@ -62,7 +62,7 @@ type LinkMode = "existing" | "new";
 
 export interface EditableTransaction {
   _id: Id<"transactions">;
-  type: "income" | "expense";
+  type: "income" | "expense" | "transfer";
   amount: number;
   originalAmount?: number;
   originalCurrency?: string;
@@ -70,18 +70,20 @@ export interface EditableTransaction {
   description?: string;
   categoryId?: Id<"categories">;
   accountId?: Id<"accounts">;
+  transferToAccountId?: Id<"accounts">;
   date: string;
 }
 
 interface Props {
   open: boolean;
   onClose: () => void;
-  initialType?: "income" | "expense";
+  initialType?: "income" | "expense" | "transfer";
   editing?: EditableTransaction | null;
 }
 
 export function TransactionForm({ open, onClose, initialType, editing }: Props) {
-  const [type, setType] = useState<"income" | "expense">("expense");
+  const [type, setType] = useState<"income" | "expense" | "transfer">("expense");
+  const [transferToAccountId, setTransferToAccountId] = useState("");
   const [expenseKind, setExpenseKind] = useState<ExpenseKind>("regular");
   const [subscriptionMode, setSubscriptionMode] = useState<LinkMode>("existing");
   const [emiMode, setEmiMode] = useState<LinkMode>("existing");
@@ -105,13 +107,18 @@ export function TransactionForm({ open, onClose, initialType, editing }: Props) 
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
-  const categories = useQuery(api.categories.list, { type });
+  const categories = useQuery(
+    api.categories.list,
+    type === "transfer" ? "skip" : { type },
+  );
   const accounts = useQuery(api.accounts.list, { activeOnly: true });
   const create = useMutation(api.transactions.create);
   const update = useMutation(api.transactions.update);
 
   const isEditing = Boolean(editing);
-  const isSubscriptionExpense = type === "expense" && expenseKind === "subscription" && !isEditing;
+  const isTransfer = type === "transfer";
+  const isSubscriptionExpense =
+    type === "expense" && expenseKind === "subscription" && !isEditing;
   const isEmiExpense = type === "expense" && expenseKind === "emi" && !isEditing;
   const isLinkedExpense = isSubscriptionExpense || isEmiExpense;
 
@@ -131,6 +138,7 @@ export function TransactionForm({ open, onClose, initialType, editing }: Props) 
     setNewEmiLoanDetails(emptyLoanDetails());
     setCurrency(BASE_CURRENCY);
     setExchangeRate(null);
+    setTransferToAccountId("");
     if (editing) {
       setType(editing.type);
       if (editing.originalCurrency && editing.originalAmount != null) {
@@ -145,6 +153,7 @@ export function TransactionForm({ open, onClose, initialType, editing }: Props) 
       setDescription(editing.description ?? "");
       setCategoryId(editing.categoryId ?? "");
       setAccountId(editing.accountId ?? "");
+      setTransferToAccountId(editing.transferToAccountId ?? "");
       setDate(editing.date);
     } else {
       setType(initialType ?? "expense");
@@ -154,6 +163,7 @@ export function TransactionForm({ open, onClose, initialType, editing }: Props) 
       setDescription("");
       setCategoryId("");
       setAccountId("");
+      setTransferToAccountId("");
       setDate(toISODate(new Date()));
     }
   }, [open, editing, initialType]);
@@ -170,7 +180,7 @@ export function TransactionForm({ open, onClose, initialType, editing }: Props) 
   };
 
   useEffect(() => {
-    if (type === "income") {
+    if (type === "income" || type === "transfer") {
       setExpenseKind("regular");
       setSelectedSub(null);
       setSelectedEmi(null);
@@ -253,7 +263,7 @@ export function TransactionForm({ open, onClose, initialType, editing }: Props) 
 
   const categoryItems = useMemo(
     () =>
-      (categories ?? []).slice(0, 10).map((c) => ({
+      (categories ?? []).map((c) => ({
         id: c._id as string,
         name: c.name,
         color: c.color,
@@ -261,6 +271,14 @@ export function TransactionForm({ open, onClose, initialType, editing }: Props) 
       })),
     [categories],
   );
+
+  const amountValue = parseFloat(amount);
+  const canSubmit =
+    Number.isFinite(amountValue) &&
+    amountValue > 0 &&
+    (isBaseCurrency(currency) ||
+      isLinkedExpense ||
+      (exchangeRate != null && exchangeRate > 0));
 
   const projectedRenewal = useMemo(() => {
     if (!date) return null;
@@ -342,6 +360,21 @@ export function TransactionForm({ open, onClose, initialType, editing }: Props) 
       }
     }
 
+    if (isTransfer) {
+      if (!accountId) {
+        setError("Choose the account to transfer from");
+        return;
+      }
+      if (!transferToAccountId) {
+        setError("Choose the account to transfer to");
+        return;
+      }
+      if (accountId === transferToAccountId) {
+        setError("From and to accounts must be different");
+        return;
+      }
+    }
+
     setSaving(true);
     try {
       const currencyPayload = isForeign
@@ -363,8 +396,11 @@ export function TransactionForm({ open, onClose, initialType, editing }: Props) 
           amount: baseAmount,
           ...currencyPayload,
           description: description.trim() || null,
-          categoryId: (categoryId as Id<"categories">) || null,
+          categoryId: isTransfer ? null : (categoryId as Id<"categories">) || null,
           accountId: (accountId as Id<"accounts">) || null,
+          transferToAccountId: isTransfer
+            ? (transferToAccountId as Id<"accounts">) || null
+            : null,
           date,
         });
       } else {
@@ -373,8 +409,13 @@ export function TransactionForm({ open, onClose, initialType, editing }: Props) 
           amount: baseAmount,
           ...currencyPayload,
           description: description.trim() || undefined,
-          categoryId: (categoryId as Id<"categories">) || undefined,
+          categoryId: isTransfer
+            ? undefined
+            : (categoryId as Id<"categories">) || undefined,
           accountId: (accountId as Id<"accounts">) || undefined,
+          transferToAccountId: isTransfer
+            ? (transferToAccountId as Id<"accounts">) || undefined
+            : undefined,
           date,
           subscriptionLink: isSubscriptionExpense
             ? subscriptionMode === "existing"
@@ -443,11 +484,13 @@ export function TransactionForm({ open, onClose, initialType, editing }: Props) 
         description={
           isEditing
             ? "Update amount, category, or account."
-            : isSubscriptionExpense
-              ? "Record a subscription payment and update renewal."
-              : isEmiExpense
-                ? "Record an EMI payment and update next debit."
-                : "Record money in or out."
+            : isTransfer
+              ? "Move money between your accounts (does not count as income or expense)."
+              : isSubscriptionExpense
+                ? "Record a subscription payment and update renewal."
+                : isEmiExpense
+                  ? "Record an EMI payment and update next debit."
+                  : "Record money in or out."
         }
         size="lg"
         footer={
@@ -467,6 +510,7 @@ export function TransactionForm({ open, onClose, initialType, editing }: Props) 
               onCancel={onClose}
               submitLabel={isEditing ? "Save changes" : "Add transaction"}
               loading={saving}
+              disabled={!canSubmit}
             />
           )
         }
@@ -490,26 +534,38 @@ export function TransactionForm({ open, onClose, initialType, editing }: Props) 
               options={[
                 { value: "expense", label: "Expense", tone: "expense" },
                 { value: "income", label: "Income", tone: "income" },
+                { value: "transfer", label: "Transfer" },
               ]}
             />
 
+            <CurrencyMoneyInput
+              value={amount}
+              onChange={setAmount}
+              currency={currency}
+              onCurrencyChange={setCurrency}
+              exchangeRate={exchangeRate}
+              onExchangeRateChange={handleExchangeRateChange}
+              transactionDate={date}
+              autoFocus={!isEditing}
+              required
+              forceBaseCurrency={isLinkedExpense}
+            />
+
             {type === "expense" && !isEditing && (
-              <FormSection title="Expense type">
-                <FormField label="What kind of expense?">
-                  <Select
-                    value={expenseKind}
-                    onChange={(e) => {
-                      setExpenseKind(e.target.value as ExpenseKind);
-                      setSelectedSub(null);
-                      setSelectedEmi(null);
-                    }}
-                  >
-                    <option value="regular">Regular expense</option>
-                    <option value="subscription">Subscription payment</option>
-                    <option value="emi">Loan EMI</option>
-                  </Select>
-                </FormField>
-              </FormSection>
+              <SegmentedField
+                label="Expense type"
+                value={expenseKind}
+                onChange={(kind) => {
+                  setExpenseKind(kind);
+                  setSelectedSub(null);
+                  setSelectedEmi(null);
+                }}
+                options={[
+                  { value: "regular", label: "Regular" },
+                  { value: "subscription", label: "Subscription" },
+                  { value: "emi", label: "Loan EMI" },
+                ]}
+              />
             )}
 
             {isSubscriptionExpense && (
@@ -693,44 +749,58 @@ export function TransactionForm({ open, onClose, initialType, editing }: Props) 
               />
             )}
 
-            <CurrencyMoneyInput
-              value={amount}
-              onChange={setAmount}
-              currency={currency}
-              onCurrencyChange={setCurrency}
-              exchangeRate={exchangeRate}
-              onExchangeRateChange={handleExchangeRateChange}
-              transactionDate={date}
-              autoFocus={!isEditing}
-              required
-              forceBaseCurrency={isLinkedExpense}
-            />
-
             <FormSection title="Details">
-              <FormField label="Category">
-                <Select
-                  value={categoryId}
-                  onChange={(e) => setCategoryId(e.target.value)}
-                >
-                  <option value="">Uncategorized</option>
-                  {(categories ?? []).map((c) => (
-                    <option key={c._id} value={c._id}>
-                      {c.name}
-                    </option>
-                  ))}
-                </Select>
-                <CategoryChips
-                  items={categoryItems}
-                  value={categoryId}
-                  onChange={setCategoryId}
-                  getIcon={getCategoryIcon}
-                />
+              {!isTransfer && (
+                <FormField label="Category" hint="Tap a category, or leave uncategorized">
+                  <CategoryChips
+                    items={categoryItems}
+                    value={categoryId}
+                    onChange={setCategoryId}
+                    getIcon={getCategoryIcon}
+                  />
+                </FormField>
+              )}
+
+              <FormField label="Date">
+                <DatePicker value={date} onChange={setDate} required />
               </FormField>
 
-              <FormRow>
-                <FormField label="Date">
-                  <DatePicker value={date} onChange={setDate} required />
-                </FormField>
+              {isTransfer ? (
+                <FormRow>
+                  <FormField label="From account" hint="Source">
+                    <Select
+                      value={accountId}
+                      onChange={(e) => setAccountId(e.target.value)}
+                      required
+                    >
+                      <option value="">Choose account</option>
+                      {(accounts ?? []).map((a) => (
+                        <option key={a._id} value={a._id}>
+                          {a.name}
+                          {a.lastFour ? ` ···· ${a.lastFour}` : ""}
+                        </option>
+                      ))}
+                    </Select>
+                  </FormField>
+                  <FormField label="To account" hint="Destination">
+                    <Select
+                      value={transferToAccountId}
+                      onChange={(e) => setTransferToAccountId(e.target.value)}
+                      required
+                    >
+                      <option value="">Choose account</option>
+                      {(accounts ?? [])
+                        .filter((a) => a._id !== accountId)
+                        .map((a) => (
+                          <option key={a._id} value={a._id}>
+                            {a.name}
+                            {a.lastFour ? ` ···· ${a.lastFour}` : ""}
+                          </option>
+                        ))}
+                    </Select>
+                  </FormField>
+                </FormRow>
+              ) : (
                 <FormField label="Account / card" hint="Where did this move?">
                   <Select
                     value={accountId}
@@ -741,19 +811,25 @@ export function TransactionForm({ open, onClose, initialType, editing }: Props) 
                       <option key={a._id} value={a._id}>
                         {a.name}
                         {a.lastFour ? ` ···· ${a.lastFour}` : ""}
-                        {"linkedBankName" in a && a.linkedBankName ? ` · ${a.linkedBankName}` : ""}
+                        {"linkedBankName" in a && a.linkedBankName
+                          ? ` · ${a.linkedBankName}`
+                          : ""}
                       </option>
                     ))}
                   </Select>
                 </FormField>
-              </FormRow>
+              )}
 
               <FormField label="Note" hint="Optional memo">
                 <Textarea
                   value={description}
                   onChange={(e) => setDescription(e.target.value)}
                   placeholder={
-                    isLinkedExpense ? "Optional note…" : "Coffee with team, salary credit…"
+                    isTransfer
+                      ? "Credit card payment, wallet top-up…"
+                      : isLinkedExpense
+                        ? "Optional note…"
+                        : "Coffee with team, salary credit…"
                   }
                   rows={2}
                 />

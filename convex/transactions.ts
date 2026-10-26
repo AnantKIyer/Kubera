@@ -3,10 +3,25 @@ import { mutation, query } from "./_generated/server";
 import { Doc, Id } from "./_generated/dataModel";
 import { billingCycle } from "./schema";
 import { requireUserId } from "./lib/user";
-import { addBillingPeriod } from "./lib/subscriptionDates";
-import { buildEmiPaymentPatch, clampInstallmentDate, getExtraPaymentMessage, inferPastLoanSchedule, resolveLoanTerms } from "./lib/emi";
+import { inferPastLoanSchedule, resolveLoanTerms } from "./lib/emi";
 import { normalizeCurrencyFields } from "./lib/currency";
-import { decryptAccounts, decryptTransactions, encryptEmiFields, encryptSubscriptionFields, encryptTransactionFields } from "./lib/sensitiveFields";
+import {
+  decryptAccounts,
+  decryptTransactions,
+  encryptEmiFields,
+  encryptSubscriptionFields,
+  encryptTransactionFields,
+} from "./lib/sensitiveFields";
+import {
+  recomputeEmiSchedule,
+  recomputeSubscriptionSchedule,
+} from "./lib/scheduleRecompute";
+
+const transactionType = v.union(
+  v.literal("income"),
+  v.literal("expense"),
+  v.literal("transfer"),
+);
 
 const currencyFields = {
   originalAmount: v.optional(v.union(v.number(), v.null())),
@@ -23,6 +38,8 @@ export type EnrichedTransaction = Doc<"transactions"> & {
   accountColor: string | null;
   accountType: string | null;
   accountLastFour: string | null;
+  transferToAccountName: string | null;
+  transferToAccountColor: string | null;
 };
 
 function enrich(
@@ -32,6 +49,9 @@ function enrich(
 ): EnrichedTransaction {
   const category = tx.categoryId ? categories.get(tx.categoryId) : undefined;
   const account = tx.accountId ? accounts.get(tx.accountId) : undefined;
+  const toAccount = tx.transferToAccountId
+    ? accounts.get(tx.transferToAccountId)
+    : undefined;
   return {
     ...tx,
     categoryName: category?.name ?? null,
@@ -42,12 +62,14 @@ function enrich(
     accountColor: account?.color ?? null,
     accountType: account?.type ?? null,
     accountLastFour: account?.lastFour ?? null,
+    transferToAccountName: toAccount?.name ?? null,
+    transferToAccountColor: toAccount?.color ?? null,
   };
 }
 
 export const list = query({
   args: {
-    type: v.optional(v.union(v.literal("income"), v.literal("expense"))),
+    type: v.optional(transactionType),
     categoryId: v.optional(v.id("categories")),
     accountId: v.optional(v.id("accounts")),
     startDate: v.optional(v.string()),
@@ -64,13 +86,6 @@ export const list = query({
         .query("transactions")
         .withIndex("by_user_type", (q) => q.eq("userId", userId).eq("type", args.type!))
         .collect();
-    } else if (args.accountId) {
-      rows = await ctx.db
-        .query("transactions")
-        .withIndex("by_user_account", (q) =>
-          q.eq("userId", userId).eq("accountId", args.accountId!),
-        )
-        .collect();
     } else {
       rows = await ctx.db
         .query("transactions")
@@ -80,7 +95,11 @@ export const list = query({
 
     rows = rows.filter((tx) => {
       if (args.categoryId && tx.categoryId !== args.categoryId) return false;
-      if (args.accountId && tx.accountId !== args.accountId) return false;
+      if (args.accountId) {
+        if (tx.accountId !== args.accountId && tx.transferToAccountId !== args.accountId) {
+          return false;
+        }
+      }
       if (args.startDate && tx.date < args.startDate) return false;
       if (args.endDate && tx.date > args.endDate) return false;
       return true;
@@ -132,12 +151,13 @@ export const list = query({
 
 export const create = mutation({
   args: {
-    type: v.union(v.literal("income"), v.literal("expense")),
+    type: transactionType,
     amount: v.number(),
     ...currencyFields,
     description: v.optional(v.string()),
     categoryId: v.optional(v.id("categories")),
     accountId: v.optional(v.id("accounts")),
+    transferToAccountId: v.optional(v.id("accounts")),
     date: v.string(),
     subscriptionLink: v.optional(
       v.object({
@@ -165,6 +185,22 @@ export const create = mutation({
     const userId = await requireUserId(ctx);
     if (!(args.amount > 0)) throw new Error("Amount must be greater than 0");
 
+    const isTransfer = args.type === "transfer";
+    if (isTransfer) {
+      if (args.subscriptionLink || args.emiLink) {
+        throw new Error("Transfers cannot link to subscriptions or EMIs");
+      }
+      if (args.categoryId) {
+        throw new Error("Transfers cannot have a category");
+      }
+      if (!args.accountId || !args.transferToAccountId) {
+        throw new Error("Choose both from and to accounts for a transfer");
+      }
+      if (args.accountId === args.transferToAccountId) {
+        throw new Error("From and to accounts must be different");
+      }
+    }
+
     const currency = normalizeCurrencyFields({
       amount: args.amount,
       originalAmount: args.originalAmount,
@@ -175,7 +211,7 @@ export const create = mutation({
       description: args.description?.trim() || null,
     });
 
-    if (args.categoryId) {
+    if (args.categoryId && !isTransfer) {
       const category = await ctx.db.get(args.categoryId);
       if (!category || category.userId !== userId) throw new Error("Category not found");
       if (category.type !== args.type) {
@@ -186,14 +222,15 @@ export const create = mutation({
       const account = await ctx.db.get(args.accountId);
       if (!account || account.userId !== userId) throw new Error("Account not found");
     }
+    if (args.transferToAccountId) {
+      const toAccount = await ctx.db.get(args.transferToAccountId);
+      if (!toAccount || toAccount.userId !== userId) {
+        throw new Error("Destination account not found");
+      }
+    }
 
     let subscriptionId: Id<"subscriptions"> | undefined;
     let emiId: Id<"emis"> | undefined;
-    let emiFeedback: {
-      extraAmount: number;
-      message: string;
-      installmentsCovered: number;
-    } | null = null;
 
     if (args.subscriptionLink && args.type === "expense") {
       const link = args.subscriptionLink;
@@ -205,8 +242,6 @@ export const create = mutation({
 
         subscriptionId = sub._id;
         await ctx.db.patch(sub._id, {
-          nextRenewalDate: addBillingPeriod(args.date, sub.billingCycle),
-          amount: currency.amount,
           isActive: true,
           accountId: args.accountId ?? sub.accountId,
           categoryId: args.categoryId ?? sub.categoryId,
@@ -223,7 +258,6 @@ export const create = mutation({
           billingCycle: link.billingCycle,
           categoryId: args.categoryId,
           accountId: args.accountId,
-          nextRenewalDate: addBillingPeriod(args.date, link.billingCycle),
           isActive: true,
           notes: (
             await encryptSubscriptionFields({
@@ -243,12 +277,11 @@ export const create = mutation({
         if (!emi || emi.userId !== userId) throw new Error("EMI not found");
 
         emiId = emi._id;
-        const result = buildEmiPaymentPatch(emi, args.date, currency.amount, {
+        await ctx.db.patch(emi._id, {
+          isActive: true,
           accountId: args.accountId ?? emi.accountId,
           categoryId: args.categoryId ?? emi.categoryId,
         });
-        await ctx.db.patch(emi._id, result.patch);
-        emiFeedback = result.feedback;
       } else {
         const name = link.name?.trim();
         if (!name) throw new Error("EMI name is required");
@@ -262,10 +295,6 @@ export const create = mutation({
         });
         const expectedEmi = resolved.expectedEmi;
         const past = link.loanDate ? inferPastLoanSchedule(link.loanDate, tenure) : null;
-        const paidInstallments = (past?.paidInstallments ?? 0) + 1;
-        const nextDebit = clampInstallmentDate(
-          past?.nextDebitDate ?? addBillingPeriod(args.date, "monthly"),
-        );
 
         const emiSensitive = await encryptEmiFields({
           name,
@@ -281,26 +310,17 @@ export const create = mutation({
           lender: emiSensitive.lender,
           categoryId: args.categoryId,
           accountId: args.accountId,
-          nextDebitDate: nextDebit,
+          nextDebitDate: past?.nextDebitDate,
           totalInstallments: tenure,
           tenureMonths: tenure,
-          paidInstallments,
+          paidInstallments: past?.paidInstallments ?? 0,
           principalAmount: link.principalAmount,
           interestRate: resolved.interestRate ?? link.interestRate,
           loanDate: link.loanDate,
-          extraPaidTotal: Math.max(0, Math.round((currency.amount - expectedEmi) * 100) / 100),
-          isActive: tenure == null || paidInstallments < tenure,
+          extraPaidTotal: 0,
+          isActive: true,
           notes: emiSensitive.notes,
         });
-
-        const extra = Math.max(0, Math.round((currency.amount - expectedEmi) * 100) / 100);
-        if (extra > 0) {
-          emiFeedback = {
-            extraAmount: extra,
-            message: getExtraPaymentMessage(extra),
-            installmentsCovered: 1,
-          };
-        }
       }
     }
 
@@ -312,12 +332,28 @@ export const create = mutation({
       originalCurrency: currency.originalCurrency,
       exchangeRate: currency.exchangeRate,
       description: sensitive.description,
-      categoryId: args.categoryId,
+      categoryId: isTransfer ? undefined : args.categoryId,
       accountId: args.accountId,
+      transferToAccountId: isTransfer ? args.transferToAccountId : undefined,
       subscriptionId,
       emiId,
       date: args.date,
     });
+
+    let emiFeedback: {
+      extraAmount: number;
+      message: string;
+      installmentsCovered: number;
+    } | null = null;
+
+    if (subscriptionId) {
+      await recomputeSubscriptionSchedule(ctx, userId, subscriptionId);
+    }
+    if (emiId) {
+      emiFeedback = await recomputeEmiSchedule(ctx, userId, emiId, {
+        feedbackForPaymentAmount: currency.amount,
+      });
+    }
 
     return { transactionId, emiFeedback };
   },
@@ -326,12 +362,13 @@ export const create = mutation({
 export const update = mutation({
   args: {
     id: v.id("transactions"),
-    type: v.optional(v.union(v.literal("income"), v.literal("expense"))),
+    type: v.optional(transactionType),
     amount: v.optional(v.number()),
     ...currencyFields,
     description: v.optional(v.union(v.string(), v.null())),
     categoryId: v.optional(v.union(v.id("categories"), v.null())),
     accountId: v.optional(v.union(v.id("accounts"), v.null())),
+    transferToAccountId: v.optional(v.union(v.id("accounts"), v.null())),
     date: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
@@ -340,6 +377,7 @@ export const update = mutation({
     if (!current || current.userId !== userId) throw new Error("Transaction not found");
 
     const nextType = args.type ?? current.type;
+    const isTransfer = nextType === "transfer";
     const patch: Partial<Doc<"transactions">> = {};
 
     if (args.type !== undefined) patch.type = args.type;
@@ -377,17 +415,46 @@ export const update = mutation({
       });
       patch.description = sensitive.description;
     }
+
+    const nextAccountId =
+      args.accountId !== undefined
+        ? ((args.accountId as Id<"accounts"> | null) ?? undefined)
+        : current.accountId;
+    const nextToAccountId =
+      args.transferToAccountId !== undefined
+        ? ((args.transferToAccountId as Id<"accounts"> | null) ?? undefined)
+        : current.transferToAccountId;
+
+    if (isTransfer) {
+      if (!nextAccountId || !nextToAccountId) {
+        throw new Error("Choose both from and to accounts for a transfer");
+      }
+      if (nextAccountId === nextToAccountId) {
+        throw new Error("From and to accounts must be different");
+      }
+      patch.categoryId = undefined;
+      patch.subscriptionId = undefined;
+      patch.emiId = undefined;
+    }
+
     if (args.categoryId !== undefined) {
-      const nextCategory = args.categoryId as Id<"categories"> | null;
-      if (nextCategory) {
-        const category = await ctx.db.get(nextCategory);
-        if (!category || category.userId !== userId) throw new Error("Category not found");
-        if (category.type !== nextType) {
-          throw new Error("Category type must match the transaction type");
-        }
-        patch.categoryId = nextCategory;
-      } else {
+      if (isTransfer) {
         patch.categoryId = undefined;
+      } else {
+        const nextCategory = args.categoryId as Id<"categories"> | null;
+        if (nextCategory) {
+          const category = await ctx.db.get(nextCategory);
+          if (!category || category.userId !== userId) throw new Error("Category not found");
+          if (nextType !== "income" && nextType !== "expense") {
+            throw new Error("Category type must match the transaction type");
+          }
+          if (category.type !== nextType) {
+            throw new Error("Category type must match the transaction type");
+          }
+          patch.categoryId = nextCategory;
+        } else {
+          patch.categoryId = undefined;
+        }
       }
     }
     if (args.accountId !== undefined) {
@@ -400,8 +467,39 @@ export const update = mutation({
         patch.accountId = undefined;
       }
     }
+    if (args.transferToAccountId !== undefined || isTransfer) {
+      if (isTransfer) {
+        if (nextToAccountId) {
+          const toAccount = await ctx.db.get(nextToAccountId);
+          if (!toAccount || toAccount.userId !== userId) {
+            throw new Error("Destination account not found");
+          }
+          patch.transferToAccountId = nextToAccountId;
+        }
+      } else {
+        patch.transferToAccountId = undefined;
+      }
+    }
+
+    const prevSub = current.subscriptionId;
+    const prevEmi = current.emiId;
 
     await ctx.db.patch(args.id, patch);
+
+    const updated = await ctx.db.get(args.id);
+    const subIds = new Set<Id<"subscriptions">>();
+    const emiIds = new Set<Id<"emis">>();
+    if (prevSub) subIds.add(prevSub);
+    if (updated?.subscriptionId) subIds.add(updated.subscriptionId);
+    if (prevEmi) emiIds.add(prevEmi);
+    if (updated?.emiId) emiIds.add(updated.emiId);
+
+    for (const id of Array.from(subIds)) {
+      await recomputeSubscriptionSchedule(ctx, userId, id);
+    }
+    for (const id of Array.from(emiIds)) {
+      await recomputeEmiSchedule(ctx, userId, id);
+    }
   },
 });
 
@@ -411,6 +509,10 @@ export const remove = mutation({
     const userId = await requireUserId(ctx);
     const current = await ctx.db.get(args.id);
     if (!current || current.userId !== userId) throw new Error("Transaction not found");
+    const subId = current.subscriptionId;
+    const emiId = current.emiId;
     await ctx.db.delete(args.id);
+    if (subId) await recomputeSubscriptionSchedule(ctx, userId, subId);
+    if (emiId) await recomputeEmiSchedule(ctx, userId, emiId);
   },
 });

@@ -24,14 +24,14 @@ export function FieldLabel({
   className?: string;
 }) {
   return (
-    <div className={cn("mb-2", className)}>
+    <div className={cn("mb-1.5", className)}>
       <label
         htmlFor={htmlFor}
-        className="block text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground"
+        className="block text-[13px] font-medium text-muted-foreground"
       >
         {children}
       </label>
-      {hint && <p className="mt-0.5 text-xs text-muted-foreground/80">{hint}</p>}
+      {hint && <p className="mt-0.5 text-[12px] text-muted-foreground/80">{hint}</p>}
     </div>
   );
 }
@@ -48,7 +48,7 @@ export function FormSection({
   return (
     <section className={cn("space-y-3", className)}>
       {title && (
-        <h4 className="text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground/70">
+        <h4 className="text-[13px] font-semibold tracking-tight text-muted-foreground">
           {title}
         </h4>
       )}
@@ -148,7 +148,7 @@ export function FormHint({ children }: { children: ReactNode }) {
 /* ── Inputs ──────────────────────────────────────────────────────── */
 
 const controlBase =
-  "w-full rounded-xl border border-border/50 bg-muted/25 px-3.5 py-2.5 text-sm text-foreground transition-[border-color,background-color,box-shadow] placeholder:text-muted-foreground/50 hover:border-border focus-visible:border-primary/30 focus-visible:bg-card focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-primary/10 disabled:cursor-not-allowed disabled:opacity-50";
+  "w-full rounded-[12px] border-0 bg-muted/55 px-3.5 py-3 text-[15px] leading-snug text-foreground transition-[background-color,box-shadow] placeholder:text-muted-foreground/45 hover:bg-muted/70 focus-visible:bg-card focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/20 disabled:cursor-not-allowed disabled:opacity-50";
 
 export const Input = forwardRef<HTMLInputElement, InputHTMLAttributes<HTMLInputElement>>(
   ({ className, ...props }, ref) => (
@@ -206,7 +206,7 @@ export function MoneyInput({
 }) {
   return (
     <div className="rounded-2xl border border-border/40 bg-muted/15 p-5">
-      <p className="text-center text-[11px] font-semibold uppercase tracking-[0.1em] text-muted-foreground">
+      <p className="text-center text-caption font-medium text-muted-foreground">
         {label}
       </p>
       <div className="mt-2 flex items-baseline justify-center gap-1">
@@ -254,23 +254,31 @@ export function SegmentedField<T extends string>({
   return (
     <div>
       {label && <FieldLabel>{label}</FieldLabel>}
-      <div className="flex gap-1 rounded-xl border border-border/60 bg-muted/25 p-1">
+      <div
+        role="radiogroup"
+        aria-label={label}
+        className="flex gap-1 rounded-xl border border-border/60 bg-muted/40 p-1"
+      >
         {options.map((opt) => {
           const active = value === opt.value;
           return (
             <button
               key={opt.value}
               type="button"
+              role="radio"
+              aria-checked={active}
               onClick={() => onChange(opt.value)}
               className={cn(
-                "flex-1 rounded-lg py-2.5 text-sm font-medium transition-all duration-200",
+                "min-h-11 flex-1 rounded-lg px-2 text-sm transition-all duration-200",
                 active
-                  ? opt.tone === "income"
-                    ? "bg-[hsl(var(--income))]/15 text-[hsl(var(--income))] shadow-sm ring-1 ring-[hsl(var(--income))]/25"
-                    : opt.tone === "expense"
-                      ? "bg-[hsl(var(--expense))]/12 text-[hsl(var(--expense))] shadow-sm ring-1 ring-[hsl(var(--expense))]/20"
-                      : "bg-card text-foreground shadow-sm ring-1 ring-border/80"
-                  : "text-muted-foreground hover:text-foreground",
+                  ? cn(
+                      "bg-card font-semibold text-foreground shadow-sm ring-1 ring-border/90",
+                      opt.tone === "income" &&
+                        "bg-[hsl(var(--income))]/18 text-[hsl(var(--income))] ring-[hsl(var(--income))]/35",
+                      opt.tone === "expense" &&
+                        "bg-[hsl(var(--expense))]/16 text-[hsl(var(--expense))] ring-[hsl(var(--expense))]/35",
+                    )
+                  : "font-medium text-muted-foreground hover:bg-muted/50 hover:text-foreground",
               )}
             >
               {opt.label}
@@ -357,15 +365,34 @@ export function CategoryChips<T extends string>({
   value,
   onChange,
   getIcon,
+  allowClear = true,
 }: {
   items: { id: T; name: string; color: string; icon: string }[];
   value: T | "";
   onChange: (id: T | "") => void;
   getIcon: (key: string) => LucideIcon;
+  /** Show an “Uncategorized” chip that clears the selection */
+  allowClear?: boolean;
 }) {
-  if (items.length === 0) return null;
+  if (items.length === 0 && !allowClear) return null;
   return (
-    <div className="flex flex-wrap gap-1.5 pt-1">
+    <div className="flex flex-wrap gap-2" role="listbox" aria-label="Category">
+      {allowClear && (
+        <button
+          type="button"
+          role="option"
+          aria-selected={value === ""}
+          onClick={() => onChange("")}
+          className={cn(
+            "inline-flex min-h-11 items-center gap-1.5 rounded-full border px-3.5 text-sm font-medium transition-all",
+            value === ""
+              ? "border-foreground/25 bg-foreground/[0.08] font-semibold text-foreground shadow-sm ring-1 ring-foreground/15"
+              : "border-border/60 bg-muted/20 text-muted-foreground hover:border-border hover:text-foreground",
+          )}
+        >
+          Uncategorized
+        </button>
+      )}
       {items.map((c) => {
         const Icon = getIcon(c.icon);
         const active = value === c.id;
@@ -373,16 +400,18 @@ export function CategoryChips<T extends string>({
           <button
             key={c.id}
             type="button"
-            onClick={() => onChange(active ? "" : c.id)}
+            role="option"
+            aria-selected={active}
+            onClick={() => onChange(active && allowClear ? "" : c.id)}
             className={cn(
-              "inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium transition-all",
+              "inline-flex min-h-11 items-center gap-2 rounded-full border px-3.5 text-sm font-medium transition-all",
               active
-                ? "text-white shadow-sm"
-                : "border border-border/60 bg-muted/20 text-muted-foreground hover:border-border hover:text-foreground",
+                ? "border-transparent font-semibold text-white shadow-sm ring-2 ring-foreground/20 ring-offset-1 ring-offset-background"
+                : "border-border/60 bg-muted/20 text-muted-foreground hover:border-border hover:text-foreground",
             )}
             style={active ? { backgroundColor: c.color } : undefined}
           >
-            <Icon size={12} />
+            <Icon size={14} className="shrink-0" aria-hidden />
             {c.name}
           </button>
         );
@@ -449,11 +478,11 @@ export function FormFooter({
   formId?: string;
 }) {
   return (
-    <div className="flex gap-2.5">
+    <div className="flex items-center gap-2.5">
       <button
         type="button"
         onClick={onCancel}
-        className="flex-1 rounded-xl border border-border/60 bg-muted/20 px-4 py-2.5 text-sm font-medium text-muted-foreground transition-colors hover:bg-muted/40 hover:text-foreground"
+        className="min-h-11 shrink-0 rounded-xl px-4 text-sm font-medium text-muted-foreground transition-colors hover:bg-muted/40 hover:text-foreground"
       >
         {cancelLabel}
       </button>
@@ -461,7 +490,7 @@ export function FormFooter({
         type="submit"
         form={formId}
         disabled={disabled || loading}
-        className="flex-[1.2] rounded-xl bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground shadow-glow transition-all hover:brightness-110 active:brightness-95 disabled:pointer-events-none disabled:opacity-50"
+        className="min-h-11 flex-1 rounded-xl bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground shadow-glow transition-all hover:brightness-110 active:brightness-95 disabled:pointer-events-none disabled:opacity-50"
       >
         {loading ? "Saving…" : submitLabel}
       </button>
