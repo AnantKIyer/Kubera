@@ -61,22 +61,22 @@ function Toggle({
       role="switch"
       aria-checked={checked}
       onClick={() => onChange(!checked)}
-      className="inline-flex items-center gap-2 text-sm"
+      className="inline-flex shrink-0 items-center gap-2.5 text-sm"
     >
       <span
         className={cn(
-          "relative h-5 w-9 rounded-full transition-colors",
+          "relative h-5 w-9 shrink-0 overflow-hidden rounded-full transition-colors",
           checked ? "bg-primary" : "bg-muted",
         )}
       >
         <span
           className={cn(
-            "absolute top-0.5 h-4 w-4 rounded-full bg-white shadow transition-transform",
-            checked ? "translate-x-4" : "translate-x-0.5",
+            "absolute left-0.5 top-0.5 h-4 w-4 rounded-full bg-white shadow transition-transform",
+            checked ? "translate-x-4" : "translate-x-0",
           )}
         />
       </span>
-      <span className="text-muted-foreground">{label}</span>
+      <span className="whitespace-nowrap text-muted-foreground">{label}</span>
     </button>
   );
 }
@@ -500,8 +500,8 @@ export default function GroupDetailPage() {
 
       {/* Who owes whom (my view) */}
       <Card className="mb-4">
-        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-3">
-          <CardTitle className="text-base">
+        <CardHeader className="flex flex-row items-center justify-between gap-3 space-y-0 pb-3">
+          <CardTitle className="min-w-0 truncate text-base">
             {settlements.length > 0 ? "Settlements" : "All settled"}
           </CardTitle>
           <Toggle
@@ -591,7 +591,7 @@ export default function GroupDetailPage() {
 
           {detail.analytics.monthly.length > 0 && (
             <div className="mt-4 space-y-1.5 border-t border-border/60 pt-4">
-              <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+              <p className="text-xs font-medium text-muted-foreground">
                 Monthly
               </p>
               {detail.analytics.monthly.map((row) => (
@@ -672,7 +672,7 @@ export default function GroupDetailPage() {
                           removeExpense({ expenseId: exp._id });
                         }
                       }}
-                      className="shrink-0 self-start rounded-md p-1.5 text-muted-foreground hover:bg-[hsl(var(--expense))]/10 hover:text-[hsl(var(--expense))]"
+                      className="shrink-0 self-start inline-flex min-h-11 min-w-11 items-center justify-center rounded-xl text-muted-foreground hover:bg-[hsl(var(--expense))]/10 hover:text-[hsl(var(--expense))]"
                     >
                       <Trash2 size={14} />
                     </button>
@@ -723,7 +723,7 @@ export default function GroupDetailPage() {
                           removeSettlement({ settlementId: s._id });
                         }
                       }}
-                      className="shrink-0 self-start rounded-md p-1.5 text-muted-foreground hover:bg-[hsl(var(--expense))]/10 hover:text-[hsl(var(--expense))]"
+                      className="shrink-0 self-start inline-flex min-h-11 min-w-11 items-center justify-center rounded-xl text-muted-foreground hover:bg-[hsl(var(--expense))]/10 hover:text-[hsl(var(--expense))]"
                     >
                       <Trash2 size={14} />
                     </button>
