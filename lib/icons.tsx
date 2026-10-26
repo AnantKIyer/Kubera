@@ -1,4 +1,5 @@
 import {
+  ArrowLeftRight,
   Briefcase,
   Car,
   CircleDashed,
@@ -27,6 +28,7 @@ import {
 } from "lucide-react";
 
 export const CATEGORY_ICONS: Record<string, LucideIcon> = {
+  "arrow-left-right": ArrowLeftRight,
   briefcase: Briefcase,
   laptop: Laptop,
   "trending-up": TrendingUp,

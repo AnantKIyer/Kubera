@@ -89,6 +89,7 @@ interface EditingAccount {
   color: string;
   creditLimit?: number;
   currentBalance?: number;
+  ledgerBalance?: number | null;
   linkedBankAccountId?: Id<"accounts">;
   initialUtilized?: number;
 }
@@ -296,7 +297,7 @@ export default function AccountsPageContent() {
                         <div className="flex gap-0.5">
                           <button
                             onClick={() => openEdit(acc as EditingAccount)}
-                            className="rounded-md p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground"
+                            className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-xl text-muted-foreground hover:bg-muted hover:text-foreground"
                           >
                             <Pencil size={14} />
                           </button>
@@ -309,19 +310,27 @@ export default function AccountsPageContent() {
                               )
                                 remove({ id: acc._id });
                             }}
-                            className="rounded-md p-1.5 text-muted-foreground hover:bg-[hsl(var(--expense))]/10 hover:text-[hsl(var(--expense))]"
+                            className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-xl text-muted-foreground hover:bg-[hsl(var(--expense))]/10 hover:text-[hsl(var(--expense))]"
                           >
                             <Trash2 size={14} />
                           </button>
                         </div>
                       </div>
 
-                      {isBank && acc.currentBalance != null && (
+                      {isBank &&
+                        (acc.ledgerBalance != null || acc.currentBalance != null) && (
                         <div className="mt-4 rounded-lg bg-muted/40 p-3 text-center">
-                          <p className="text-xs text-muted-foreground">Current balance</p>
+                          <p className="text-xs text-muted-foreground">Balance</p>
                           <p className="mt-1 text-lg font-semibold tabular-nums text-[hsl(var(--income))]">
-                            {formatCurrency(acc.currentBalance)}
+                            {formatCurrency(
+                              acc.ledgerBalance ?? acc.currentBalance ?? 0,
+                            )}
                           </p>
+                          {acc.currentBalance != null && (
+                            <p className="mt-1 text-[11px] text-muted-foreground">
+                              Opening {formatCurrency(acc.currentBalance)}
+                            </p>
+                          )}
                         </div>
                       )}
 
@@ -384,7 +393,7 @@ export default function AccountsPageContent() {
                               <p className="mt-1 font-semibold tabular-nums text-[hsl(var(--expense))]">
                                 {formatCurrency(creditUsage.utilized ?? 0)}
                               </p>
-                              <p className="mt-0.5 text-[10px] text-muted-foreground">
+                              <p className="mt-0.5 text-caption text-muted-foreground">
                                 Set a credit limit to track utilization
                               </p>
                             </div>
@@ -522,8 +531,8 @@ export default function AccountsPageContent() {
                   )}
                   {type === "bank" && (
                     <FormField
-                      label="Current balance"
-                      hint="Balance in this bank account right now"
+                      label="Opening balance"
+                      hint="Snapshot when you added the account. Transactions and transfers update the displayed balance on top of this."
                     >
                       <MoneyInput value={currentBalance} onChange={setCurrentBalance} size="md" />
                     </FormField>

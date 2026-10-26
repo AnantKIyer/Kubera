@@ -12,7 +12,7 @@ import { EditableTransaction } from "./transaction-form";
 
 export interface TxItem {
   _id: Id<"transactions">;
-  type: "income" | "expense";
+  type: "income" | "expense" | "transfer";
   amount: number;
   originalAmount?: number;
   originalCurrency?: string;
@@ -20,6 +20,7 @@ export interface TxItem {
   description?: string;
   categoryId?: Id<"categories">;
   accountId?: Id<"accounts">;
+  transferToAccountId?: Id<"accounts">;
   date: string;
   categoryName: string | null;
   categoryColor: string | null;
@@ -28,6 +29,8 @@ export interface TxItem {
   accountName?: string | null;
   accountColor?: string | null;
   accountLastFour?: string | null;
+  transferToAccountName?: string | null;
+  transferToAccountColor?: string | null;
 }
 
 function Row({
@@ -38,8 +41,11 @@ function Row({
   onEdit?: (t: EditableTransaction) => void;
 }) {
   const remove = useMutation(api.transactions.remove);
-  const Icon = getCategoryIcon(tx.categoryIcon);
-  const color = tx.categoryColor ?? "#94a3b8";
+  const isTransfer = tx.type === "transfer";
+  const Icon = getCategoryIcon(isTransfer ? "arrow-left-right" : tx.categoryIcon);
+  const color = isTransfer
+    ? (tx.accountColor ?? "#64748b")
+    : (tx.categoryColor ?? "#94a3b8");
   const hasForeign =
     tx.originalCurrency && tx.originalAmount != null && tx.originalCurrency !== "INR";
 
@@ -55,14 +61,21 @@ function Row({
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-2">
           <p className="truncate text-sm font-medium">
-            {tx.description || tx.categoryName || "Transaction"}
+            {tx.description ||
+              (isTransfer
+                ? `${tx.accountName ?? "Account"} → ${tx.transferToAccountName ?? "Account"}`
+                : tx.categoryName) ||
+              "Transaction"}
           </p>
         </div>
         <p className="truncate text-xs text-muted-foreground">
-          {tx.categoryName ?? "Uncategorized"}
-          {tx.categoryKind === "investment" && " · Investment"}
-          {tx.accountName && ` · ${tx.accountName}`}
-          {tx.accountLastFour && ` ····${tx.accountLastFour}`}
+          {isTransfer
+            ? `Transfer · ${tx.accountName ?? "From"} → ${tx.transferToAccountName ?? "To"}`
+            : `${tx.categoryName ?? "Uncategorized"}${
+                tx.categoryKind === "investment" ? " · Investment" : ""
+              }${tx.accountName ? ` · ${tx.accountName}` : ""}${
+                tx.accountLastFour ? ` ····${tx.accountLastFour}` : ""
+              }`}
           {" · "}
           {formatDayLabel(tx.date)}
         </p>
@@ -72,21 +85,33 @@ function Row({
         <p
           className={cn(
             "text-sm font-semibold tabular-nums",
-            tx.type === "income" ? "text-[hsl(var(--income))]" : "text-foreground",
+            tx.type === "income"
+              ? "text-[hsl(var(--income))]"
+              : tx.type === "transfer"
+                ? "text-muted-foreground"
+                : "text-foreground",
           )}
         >
+          <span className="sr-only">
+            {tx.type === "income"
+              ? "Income "
+              : tx.type === "expense"
+                ? "Expense "
+                : "Transfer "}
+          </span>
           {formatSigned(tx.amount, tx.type)}
         </p>
         {hasForeign && (
-          <p className="text-[11px] tabular-nums text-muted-foreground">
+          <p className="text-caption tabular-nums text-muted-foreground">
             {formatInCurrency(tx.originalAmount!, tx.originalCurrency!)}
           </p>
         )}
       </div>
 
-      <div className="flex items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100">
+      <div className="flex items-center gap-0.5 opacity-100 sm:opacity-0 sm:transition-opacity sm:group-hover:opacity-100 sm:group-focus-within:opacity-100">
         {onEdit && (
           <button
+            type="button"
             onClick={() =>
               onEdit({
                 _id: tx._id,
@@ -98,23 +123,27 @@ function Row({
                 description: tx.description,
                 categoryId: tx.categoryId,
                 accountId: tx.accountId,
+                transferToAccountId: tx.transferToAccountId,
                 date: tx.date,
               })
             }
-            className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+            className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-xl text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
             title="Edit"
+            aria-label="Edit transaction"
           >
-            <Pencil size={15} />
+            <Pencil size={16} aria-hidden />
           </button>
         )}
         <button
+          type="button"
           onClick={() => {
             if (confirm("Delete this transaction?")) remove({ id: tx._id });
           }}
-          className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-[hsl(var(--expense))]/10 hover:text-[hsl(var(--expense))]"
+          className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-xl text-muted-foreground transition-colors hover:bg-[hsl(var(--expense))]/10 hover:text-[hsl(var(--expense))]"
           title="Delete"
+          aria-label="Delete transaction"
         >
-          <Trash2 size={15} />
+          <Trash2 size={16} aria-hidden />
         </button>
       </div>
     </div>
@@ -149,14 +178,14 @@ export function TransactionList({
   return (
     <div className="space-y-5">
       {Array.from(groups.entries()).map(([date, items]) => {
-        const dayNet = items.reduce(
-          (sum, t) => sum + (t.type === "income" ? t.amount : -t.amount),
-          0,
-        );
+        const dayNet = items.reduce((sum, t) => {
+          if (t.type === "transfer") return sum;
+          return sum + (t.type === "income" ? t.amount : -t.amount);
+        }, 0);
         return (
           <div key={date}>
             <div className="mb-1 flex items-center justify-between px-3">
-              <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+              <span className="text-xs font-medium text-muted-foreground">
                 {formatDayLabel(date)}
               </span>
               <span

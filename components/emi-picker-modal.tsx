@@ -125,7 +125,7 @@ export function EmiPickerModal({ open, onClose, onSelect }: Props) {
                   {e.nextDebitDate ? ` · Due ${formatDate(e.nextDebitDate)}` : ""}
                 </p>
                 {e.principalAmount != null && e.progress != null && (
-                  <p className="mt-0.5 text-[10px] text-muted-foreground">
+                  <p className="mt-0.5 text-caption text-muted-foreground">
                     {formatCurrency(e.totalPaid)} of {formatCurrency(e.principalAmount)} (
                     {formatPercent(e.progress)})
                   </p>

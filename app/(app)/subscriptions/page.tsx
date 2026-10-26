@@ -187,7 +187,7 @@ export default function SubscriptionsPage() {
                     <div className="flex items-center gap-2">
                       <p className="font-medium">{s.name}</p>
                       {!s.isActive && (
-                        <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] font-medium uppercase">
+                        <span className="rounded bg-muted px-1.5 py-0.5 text-caption font-medium">
                           Paused
                         </span>
                       )}
@@ -215,7 +215,7 @@ export default function SubscriptionsPage() {
                     </button>
                     <button
                       onClick={() => openEdit(s as EditingSub)}
-                      className="rounded-md p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground"
+                      className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-xl text-muted-foreground hover:bg-muted hover:text-foreground"
                     >
                       <Pencil size={14} />
                     </button>
@@ -223,7 +223,7 @@ export default function SubscriptionsPage() {
                       onClick={() => {
                         if (confirm("Delete this subscription?")) remove({ id: s._id });
                       }}
-                      className="rounded-md p-1.5 text-muted-foreground hover:bg-[hsl(var(--expense))]/10 hover:text-[hsl(var(--expense))]"
+                      className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-xl text-muted-foreground hover:bg-[hsl(var(--expense))]/10 hover:text-[hsl(var(--expense))]"
                     >
                       <Trash2 size={14} />
                     </button>

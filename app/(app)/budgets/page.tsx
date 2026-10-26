@@ -4,18 +4,13 @@ import { useMemo, useState } from "react";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { Id } from "@/convex/_generated/dataModel";
-import {
-  ChevronLeft,
-  ChevronRight,
-  Plus,
-  Target,
-  Trash2,
-} from "lucide-react";
+import { Plus, Target, Trash2 } from "lucide-react";
 import { PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Modal } from "@/components/ui/modal";
 import { EmptyState, Skeleton } from "@/components/ui/misc";
+import { MonthPicker } from "@/components/ui/month-picker";
 import {
   FormBody,
   FormField,
@@ -31,7 +26,6 @@ import {
   formatCurrency,
   formatMonth,
   formatPercent,
-  shiftMonth,
 } from "@/lib/format";
 
 const FORM_ID = "budget-form";
@@ -83,26 +77,14 @@ export default function BudgetsPage() {
         title="Budgets"
         description="Set monthly limits and track your spending against them."
         action={
-          <div className="flex items-center gap-2">
-            <div className="flex items-center gap-1 rounded-lg border border-border bg-card p-1">
-              <button
-                onClick={() => setMonth(shiftMonth(month, -1))}
-                className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-              >
-                <ChevronLeft size={18} />
-              </button>
-              <span className="min-w-[120px] text-center text-sm font-semibold">
-                {formatMonth(month)}
-              </span>
-              <button
-                onClick={() => setMonth(shiftMonth(month, 1))}
-                className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-              >
-                <ChevronRight size={18} />
-              </button>
-            </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <MonthPicker
+              month={month}
+              onChange={setMonth}
+              disableNext={month >= currentMonth()}
+            />
             <Button onClick={() => setModalOpen(true)}>
-              <Plus size={16} /> Budget
+              <Plus size={16} aria-hidden /> Budget
             </Button>
           </div>
         }
@@ -176,7 +158,7 @@ export default function BudgetsPage() {
                       onClick={() => {
                         if (confirm("Remove this budget?")) removeBudget({ id: b._id });
                       }}
-                      className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-[hsl(var(--expense))]/10 hover:text-[hsl(var(--expense))]"
+                      className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-xl text-muted-foreground transition-colors hover:bg-[hsl(var(--expense))]/10 hover:text-[hsl(var(--expense))]"
                     >
                       <Trash2 size={15} />
                     </button>

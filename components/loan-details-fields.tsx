@@ -62,7 +62,7 @@ export function LoanDetailsFields({
 
   return (
     <div className="space-y-3 rounded-2xl border border-border/50 bg-muted/15 p-4">
-      <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
+      <p className="text-caption font-medium text-muted-foreground">
         Loan details
       </p>
 
