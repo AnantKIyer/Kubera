@@ -106,7 +106,7 @@ async function clearUserFinanceData(ctx: MutationCtx, userId: Id<"users">) {
     .collect();
   for (const g of created) groupIds.add(g._id);
 
-  for (const groupId of groupIds) {
+  for (const groupId of Array.from(groupIds)) {
     const expenses = await ctx.db
       .query("groupExpenses")
       .withIndex("by_group", (q) => q.eq("groupId", groupId))
