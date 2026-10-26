@@ -9,7 +9,9 @@ import {
   formatPercent,
   formatPercentChange,
   formatRateDelta,
+  formatSigned,
 } from "@/lib/format";
+import { buttonClassName } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { INVESTMENT_TYPE_LABELS, type InvestmentType } from "@/lib/investments";
@@ -85,6 +87,8 @@ interface Insights {
       institution: string | null;
       color: string;
       currentBalance: number | null;
+      openingBalance?: number | null;
+      ledgerBalance?: number | null;
     }[];
   };
   portfolio: {
@@ -155,72 +159,97 @@ function DeltaRow({
   );
 }
 
+function hasMeaningfulDeltas(insights: Insights) {
+  const c = insights.comparison;
+  return [c.balance, c.income, c.expenses, c.savingsRate, c.investmentOutflow].some(
+    (d) => d.change !== 0,
+  );
+}
+
 export function MonthComparisonPanel({ insights }: { insights: Insights }) {
   const v = verdictCopy[insights.comparison.verdict];
+  const showVerdict =
+    insights.comparison.verdict !== "neutral" || hasMeaningfulDeltas(insights);
 
   return (
     <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
       <Card>
-        <CardHeader className="flex-row items-center justify-between">
+        <CardHeader className="flex-row items-center justify-between gap-3">
           <CardTitle>vs last month</CardTitle>
-          <span className={cn("rounded-full px-2.5 py-1 text-xs font-semibold", v.bg, v.tone)}>
-            {v.label}
-          </span>
+          {showVerdict && (
+            <span
+              className={cn(
+                "rounded-full px-2.5 py-1 text-xs font-semibold",
+                v.bg,
+                v.tone,
+              )}
+            >
+              {v.label}
+            </span>
+          )}
         </CardHeader>
         <CardContent className="divide-y divide-border">
           <DeltaRow label="Net balance" delta={insights.comparison.balance} />
           <DeltaRow label="Income" delta={insights.comparison.income} />
           <DeltaRow label="Expenses" delta={insights.comparison.expenses} invert />
           <DeltaRow label="Savings rate" delta={insights.comparison.savingsRate} isRate />
-          <DeltaRow label="Investment outflow" delta={insights.comparison.investmentOutflow} invert />
+          <DeltaRow
+            label="Investment outflow"
+            delta={insights.comparison.investmentOutflow}
+            invert
+          />
         </CardContent>
       </Card>
 
       <Card>
         <CardHeader>
-          <CardTitle className="flex items-center gap-2">
+          <CardTitle className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
             End-of-month projection
             <span className="text-xs font-normal text-muted-foreground">
-              Day {insights.projections.daysElapsed} of {insights.projections.daysInMonth}
+              Day {insights.projections.daysElapsed} of{" "}
+              {insights.projections.daysInMonth}
             </span>
           </CardTitle>
         </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="grid grid-cols-2 gap-3">
-            <div className="rounded-lg bg-muted/50 p-3">
-              <p className="text-xs text-muted-foreground">Projected income</p>
-              <p className="mt-1 text-lg font-bold tabular-nums text-[hsl(var(--income))]">
-                {formatCurrency(insights.projections.projectedIncome)}
-              </p>
-              <p className="text-xs text-muted-foreground">
-                vs last: {formatDelta(insights.projections.vsLastMonth.income.change)}
+        <CardContent className="divide-y divide-border">
+          <div className="flex items-center justify-between gap-3 py-2.5">
+            <div>
+              <p className="text-sm text-muted-foreground">Projected income</p>
+              <p className="text-caption text-muted-foreground">
+                vs last {formatDelta(insights.projections.vsLastMonth.income.change)}
               </p>
             </div>
-            <div className="rounded-lg bg-muted/50 p-3">
-              <p className="text-xs text-muted-foreground">Projected expenses</p>
-              <p className="mt-1 text-lg font-bold tabular-nums text-[hsl(var(--expense))]">
-                {formatCurrency(insights.projections.projectedExpenses)}
-              </p>
-              <p className="text-xs text-muted-foreground">
-                vs last: {formatDelta(insights.projections.vsLastMonth.expenses.change)}
-              </p>
-            </div>
+            <p className="text-lg font-bold tabular-nums text-[hsl(var(--income))]">
+              {formatSigned(insights.projections.projectedIncome, "income")}
+            </p>
           </div>
-          <div className="rounded-lg border border-border p-3">
-            <div className="flex items-center justify-between">
-              <span className="text-sm text-muted-foreground">Projected net</span>
-              <span className="text-lg font-bold tabular-nums">
-                {formatCurrency(insights.projections.projectedBalance)}
-              </span>
+          <div className="flex items-center justify-between gap-3 py-2.5">
+            <div>
+              <p className="text-sm text-muted-foreground">Projected expenses</p>
+              <p className="text-caption text-muted-foreground">
+                vs last {formatDelta(insights.projections.vsLastMonth.expenses.change)}
+              </p>
             </div>
-            <div className="mt-1 flex items-center justify-between text-xs">
-              <span className="text-muted-foreground">Savings rate</span>
-              <span className="font-medium">{formatPercent(insights.projections.projectedSavingsRate)}</span>
-            </div>
+            <p className="text-lg font-bold tabular-nums">
+              {formatSigned(insights.projections.projectedExpenses, "expense")}
+            </p>
           </div>
-          {insights.projections.projectedBalance < insights.projections.vsLastMonth.balance.previous && (
-            <p className="flex items-center gap-2 rounded-lg bg-[hsl(var(--expense))]/10 px-3 py-2 text-xs text-[hsl(var(--expense))]">
-              <AlertTriangle size={14} />
+          <div className="flex items-center justify-between gap-3 py-2.5">
+            <span className="text-sm text-muted-foreground">Projected net</span>
+            <span className="text-lg font-bold tabular-nums">
+              {formatDelta(insights.projections.projectedBalance)}
+            </span>
+          </div>
+          <div className="flex items-center justify-between gap-3 py-2.5">
+            <span className="text-sm text-muted-foreground">Savings rate</span>
+            <span className="font-semibold tabular-nums">
+              {formatPercent(insights.projections.projectedSavingsRate)}
+            </span>
+          </div>
+          {insights.projections.projectedBalance <
+            insights.projections.vsLastMonth.balance.previous && (
+            <p className="mt-3 flex items-center gap-2 rounded-xl bg-[hsl(var(--expense))]/10 px-3 py-2.5 text-xs text-[hsl(var(--expense))]">
+              <AlertTriangle size={14} aria-hidden />
               At current pace you may finish below last month&apos;s net savings.
             </p>
           )}
@@ -381,12 +410,19 @@ export function InvestmentPortfolioCard({
             )}
           </div>
         ) : (
-          <div className="rounded-lg border border-dashed border-border/70 px-4 py-5 text-center">
-            <p className="text-sm text-muted-foreground">No investments tracked yet</p>
-            {onAdd && (
-              <Button size="sm" className="mt-3" onClick={onAdd}>
-                <Plus size={14} /> Add investment
+          <div className="rounded-xl border border-dashed border-border/70 px-4 py-6 text-center">
+            <p className="text-sm font-medium text-foreground">No investments tracked yet</p>
+            <p className="mt-1 text-xs text-muted-foreground">
+              SIPs, funds, stocks, gold, FD — add what you hold.
+            </p>
+            {onAdd ? (
+              <Button size="md" className="mt-4" onClick={onAdd}>
+                <Plus size={16} aria-hidden /> Add investment
               </Button>
+            ) : (
+              <Link href="/investments" className={cn(buttonClassName(), "mt-4")}>
+                <Plus size={16} aria-hidden /> Add investment
+              </Link>
             )}
           </div>
         )}

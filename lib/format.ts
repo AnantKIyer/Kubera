@@ -25,7 +25,13 @@ export function formatCompactCurrency(value: number): string {
   return compactFormatter.format(value);
 }
 
-export function formatSigned(value: number, type: "income" | "expense"): string {
+export function formatSigned(
+  value: number,
+  type: "income" | "expense" | "transfer",
+): string {
+  if (type === "transfer") {
+    return formatCurrency(value);
+  }
   const sign = type === "income" ? "+" : "-";
   return `${sign}${currencyFormatter.format(Math.abs(value))}`;
 }
