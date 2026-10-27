@@ -1,17 +1,17 @@
 import { ConvexError, v } from "convex/values";
-import {
-  getAuthUserId,
-  modifyAccountCredentials,
-} from "@convex-dev/auth/server";
-import { retrieveAccountOrThrow } from "./lib/retrieveAccount";
 import { Id } from "./_generated/dataModel";
-import { action, internalQuery, mutation, query } from "./_generated/server";
-import { internal } from "./_generated/api";
-import { normalizeEmail } from "../lib/auth/normalize";
+import { mutation, query } from "./_generated/server";
+import {
+  isValidUsername,
+  normalizeUsername,
+} from "../lib/auth/normalize";
 import { BASE_CURRENCY, isLogCurrency, resolveHomeCurrency } from "../lib/currency";
-import { requireUserId } from "./lib/user";
+import {
+  ensureUserForIdentity,
+  getCurrentUserId,
+  requireUserId,
+} from "./lib/user";
 
-const PROVIDER_ID = "password";
 const MAX_AVATAR_BYTES = 2 * 1024 * 1024;
 
 function parseStorageId(image: string | undefined): Id<"_storage"> | null {
@@ -19,10 +19,18 @@ function parseStorageId(image: string | undefined): Id<"_storage"> | null {
   return image as Id<"_storage">;
 }
 
+/** Create or link the Convex user for the signed-in Clerk identity. */
+export const ensureCurrentUser = mutation({
+  args: {},
+  handler: async (ctx) => {
+    return await ensureUserForIdentity(ctx);
+  },
+});
+
 export const me = query({
   args: {},
   handler: async (ctx) => {
-    const userId = await getAuthUserId(ctx);
+    const userId = await getCurrentUserId(ctx);
     if (!userId) return null;
 
     const user = await ctx.db.get(userId);
@@ -43,15 +51,6 @@ export const me = query({
   },
 });
 
-export const getUserForPasswordChange = internalQuery({
-  args: { userId: v.id("users") },
-  handler: async (ctx, { userId }) => {
-    const user = await ctx.db.get(userId);
-    if (!user?.email) return null;
-    return { email: normalizeEmail(user.email) };
-  },
-});
-
 export const updateProfile = mutation({
   args: {
     name: v.string(),
@@ -63,6 +62,61 @@ export const updateProfile = mutation({
       throw new ConvexError("Name is required.");
     }
     await ctx.db.patch(userId, { name: trimmed });
+  },
+});
+
+export const updateUsername = mutation({
+  args: {
+    username: v.string(),
+  },
+  handler: async (ctx, { username }) => {
+    const userId = await requireUserId(ctx);
+    const normalized = normalizeUsername(username);
+    if (!isValidUsername(normalized)) {
+      throw new ConvexError(
+        "Username must be 3–24 characters: letters, numbers, and underscores only.",
+      );
+    }
+
+    const user = await ctx.db.get(userId);
+    if (!user) throw new ConvexError("User not found.");
+    if (user.username === normalized) return normalized;
+
+    const takenUser = await ctx.db
+      .query("users")
+      .withIndex("username", (q) => q.eq("username", normalized))
+      .unique();
+    if (takenUser && takenUser._id !== userId) {
+      throw new ConvexError("That username is already taken.");
+    }
+
+    const takenRegistry = await ctx.db
+      .query("usernames")
+      .withIndex("by_username", (q) => q.eq("username", normalized))
+      .unique();
+    if (takenRegistry?.userId !== undefined && takenRegistry.userId !== userId) {
+      throw new ConvexError("That username is already taken.");
+    }
+
+    const previous = user.username;
+    if (previous && previous !== normalized) {
+      const oldReg = await ctx.db
+        .query("usernames")
+        .withIndex("by_username", (q) => q.eq("username", previous))
+        .unique();
+      if (oldReg?.userId === userId) {
+        await ctx.db.delete(oldReg._id);
+      }
+    }
+
+    if (takenRegistry) {
+      await ctx.db.patch(takenRegistry._id, { userId });
+    } else {
+      await ctx.db.insert("usernames", { username: normalized, userId });
+    }
+
+    await ctx.db.patch(userId, { username: normalized });
+    return normalized;
   },
 });
 
@@ -130,47 +184,5 @@ export const removeProfileImage = mutation({
       await ctx.storage.delete(previousId);
     }
     await ctx.db.patch(userId, { image: undefined });
-  },
-});
-
-export const changePassword = action({
-  args: {
-    currentPassword: v.string(),
-    newPassword: v.string(),
-  },
-  handler: async (ctx, { currentPassword, newPassword }) => {
-    const userId = await getAuthUserId(ctx);
-    if (!userId) throw new ConvexError("Not authenticated.");
-
-    if (!newPassword || newPassword.length < 8) {
-      throw new ConvexError("New password must be at least 8 characters.");
-    }
-    if (currentPassword === newPassword) {
-      throw new ConvexError("New password must be different from the current one.");
-    }
-
-    const account = await ctx.runQuery(internal.users.getUserForPasswordChange, {
-      userId,
-    });
-    if (!account) {
-      throw new ConvexError("Password change is not available for this account.");
-    }
-
-    const retrieved = await retrieveAccountOrThrow(
-      ctx,
-      {
-        provider: PROVIDER_ID,
-        account: { id: account.email, secret: currentPassword },
-      },
-      "Current password is incorrect.",
-    );
-    if (retrieved.user._id !== userId) {
-      throw new ConvexError("Current password is incorrect.");
-    }
-
-    await modifyAccountCredentials(ctx, {
-      provider: PROVIDER_ID,
-      account: { id: account.email, secret: newPassword },
-    });
   },
 });

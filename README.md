@@ -1,10 +1,10 @@
 # Kubera
 
-Personal finance PWA for day-to-day money management (INR-first). Track transactions, accounts, budgets, subscriptions, loans/EMIs, investments, shared expense groups, and analytics — backed by Convex Auth and a Convex database.
+Personal finance PWA for day-to-day money management (INR-first). Track transactions, accounts, budgets, subscriptions, loans/EMIs, investments, shared expense groups, and analytics — backed by Clerk auth and a Convex database.
 
 ## Features
 
-- **Auth** — Sign up / sign in with email, username, or phone; password reset via phone OTP
+- **Auth** — Sign up / sign in via Clerk (email/password and Clerk’s reset flow); Convex trusts Clerk JWTs
 - **Dashboard** — Monthly balance, income, expenses, savings rate, charts, and recent activity
 - **Transactions** — Income/expense CRUD, search/filters, categories, accounts, foreign-currency amounts
 - **Accounts** — Bank, credit, debit, and wallet accounts with balances and credit utilization
@@ -22,16 +22,16 @@ Personal finance PWA for day-to-day money management (INR-first). Track transact
 |-------|--------|
 | Frontend | Next.js 14 (App Router), React 18, TypeScript, Tailwind CSS, Recharts |
 | Backend | Convex (database, queries/mutations/actions, file storage) |
-| Auth | Convex Auth (custom password provider) |
+| Auth | [Clerk](https://clerk.com/) (JWT → Convex) |
 | PWA | `@ducanh2912/next-pwa` |
 | FX rates | [Frankfurter](https://www.frankfurter.app/) |
-| Optional SMS | Twilio (password-reset OTP) |
 
 ## Prerequisites
 
 - Node.js 18+
 - npm
 - A [Convex](https://www.convex.dev/) account
+- A [Clerk](https://clerk.com/) application (with the Convex integration enabled)
 
 ## Getting started
 
@@ -51,15 +51,29 @@ npx convex dev
 
 This creates/links a Convex deployment and writes `CONVEX_DEPLOYMENT`, `NEXT_PUBLIC_CONVEX_URL`, and `NEXT_PUBLIC_CONVEX_SITE_URL` into `.env.local`. You can also copy `.env.local.example` and fill those values manually.
 
-### 3. Configure Convex Auth
+### 3. Configure Clerk
 
-One-time setup for JWT keys and local site URL:
+1. Create a Clerk application and **activate the Convex integration** in the Clerk Dashboard (sets session `aud` to `convex` when available).
+2. Ensure a JWT template named `convex` with claim `"aud": "convex"` exists (Clerk Dashboard → JWT Templates, or create via CLI). Prefer a **3600s** lifetime to reduce token-refresh flicker. `ConvexProviderWithClerk` uses the session token when `aud === "convex"`, otherwise requests the `convex` template.
+3. Copy the Clerk Frontend API URL (e.g. `https://verb-noun-00.clerk.accounts.dev`).
+4. Set it on Convex:
 
 ```bash
-npm run setup:auth
+npx convex env set CLERK_JWT_ISSUER_DOMAIN "https://YOUR_INSTANCE.clerk.accounts.dev"
 ```
 
-This sets `JWT_PRIVATE_KEY`, `JWKS`, and `SITE_URL=http://localhost:3000` on your Convex deployment.
+Replace any placeholder value (e.g. `REPLACE_WITH_CLERK_FRONTEND_API`) with your real Frontend API URL from Clerk → API Keys. Keep the env name `CLERK_JWT_ISSUER_DOMAIN` (used by [`convex/auth.config.ts`](convex/auth.config.ts)).
+
+5. Add Clerk keys to `.env.local` (see `.env.local.example`):
+
+```bash
+NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=pk_test_...
+CLERK_SECRET_KEY=sk_test_...
+NEXT_PUBLIC_CLERK_SIGN_IN_URL=/sign-in
+NEXT_PUBLIC_CLERK_SIGN_UP_URL=/sign-up
+```
+
+Existing Convex user rows are **linked by email** when the same address signs in with Clerk (`clerkId` is stored on `users`), only if that row has no other `clerkId`. Passwords from the old Convex Auth system do not carry over — use Clerk sign-up / reset with the same email.
 
 ### 4. Start the Next.js app
 
@@ -126,23 +140,12 @@ npm run test:encryption
 
 This smoke-tests round-trip encrypt/decrypt, plaintext fallback, legacy passthrough, missing-key errors, and wrong-key failure — without needing a Convex deployment.
 
-### Optional: Twilio SMS (password reset OTP)
-
-Set these on the Convex deployment if you want SMS OTP delivery:
-
-```bash
-npx convex env set TWILIO_ACCOUNT_SID "..."
-npx convex env set TWILIO_AUTH_TOKEN "..."
-npx convex env set TWILIO_PHONE_NUMBER "..."
-```
-
 ## Useful scripts
 
 | Script | Purpose |
 |--------|---------|
 | `npm run dev` | Next.js frontend |
 | `npm run dev:backend` | Convex backend (`convex dev`) |
-| `npm run setup:auth` | Generate and set Convex Auth JWT env vars |
 | `npm run test:encryption` | Smoke-test AES-GCM field encryption helpers |
 | `npm run convex:codegen` | Regenerate Convex client types |
 | `npm run pwa:icons` | Generate PWA icons |
@@ -155,21 +158,21 @@ npx convex env set TWILIO_PHONE_NUMBER "..."
 ```
 Kubera/
 ├── app/
-│   ├── (auth)/          # Sign in, sign up, forgot password
+│   ├── (auth)/          # Clerk sign-in / sign-up
 │   ├── (app)/           # Authenticated screens (dashboard, transactions, …)
 │   ├── offline/         # PWA offline fallback
 │   ├── layout.tsx
-│   ├── providers.tsx
+│   ├── providers.tsx    # ClerkProvider + ConvexProviderWithClerk
 │   └── manifest.ts
+├── middleware.ts        # clerkMiddleware route protection
 ├── components/          # UI, forms, charts, layout, feature widgets
-├── convex/              # Schema, auth, and domain functions
+├── convex/              # Schema and domain functions
+│   ├── auth.config.ts   # Clerk JWT issuer for Convex
 │   ├── schema.ts
-│   ├── transactions.ts, accounts.ts, budgets.ts, …
-│   ├── groups.ts
-│   ├── currency.ts
-│   └── lib/             # Shared server helpers (EMI, encryption, …)
+│   ├── users.ts         # ensureCurrentUser (Clerk → users row)
+│   └── lib/             # Shared server helpers (user, EMI, encryption, …)
 ├── lib/                 # Client/shared helpers (format, dates, nav, …)
-├── scripts/             # Auth setup, encryption key, PWA icons
+├── scripts/             # Encryption key, PWA icons, verify helpers
 └── public/              # Static assets / generated PWA output
 ```
 
@@ -188,8 +191,8 @@ There is no Next.js `app/api` layer — the client talks to Convex directly.
 | `/analytics` | Analytics |
 | `/budgets` | Budgets |
 | `/categories` | Categories |
-| `/settings` | Profile & password |
-| `/sign-in`, `/sign-up`, `/forgot-password` | Auth |
+| `/settings` | Profile (password via Clerk account) |
+| `/sign-in`, `/sign-up` | Clerk auth (password reset is inside Clerk sign-in) |
 
 ## Production build
 

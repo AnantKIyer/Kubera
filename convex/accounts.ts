@@ -3,65 +3,12 @@ import { mutation, query } from "./_generated/server";
 import { Doc, Id } from "./_generated/dataModel";
 import { accountType } from "./schema";
 import { requireUserId } from "./lib/user";
-import {
-  creditAvailable,
-  creditUtilizationPct,
-  creditUtilized,
-} from "./lib/credit";
+import { computeAccountUsage, type LedgerTx } from "./lib/accountBalances";
 import { decryptAccounts, encryptAccountFields } from "./lib/sensitiveFields";
 
 function currentMonthKey(): string {
   const now = new Date();
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
-}
-
-function computeUsage(
-  accountId: string,
-  accountType: string,
-  creditLimit: number | undefined,
-  initialUtilized: number | undefined,
-  transactions: { accountId?: string; type: string; amount: number; date: string }[],
-  month: string,
-) {
-  let totalExpense = 0;
-  let totalIncome = 0;
-  let monthExpense = 0;
-  let monthIncome = 0;
-
-  for (const tx of transactions) {
-    if (tx.accountId !== accountId) continue;
-    if (tx.type === "expense") {
-      totalExpense += tx.amount;
-      if (tx.date.slice(0, 7) === month) monthExpense += tx.amount;
-    } else {
-      totalIncome += tx.amount;
-      if (tx.date.slice(0, 7) === month) monthIncome += tx.amount;
-    }
-  }
-
-  if (accountType === "credit") {
-    const utilized = creditUtilized(initialUtilized, totalExpense, totalIncome);
-    const available = creditAvailable(creditLimit, utilized);
-    return {
-      totalExpense,
-      totalIncome,
-      monthExpense,
-      monthIncome,
-      utilized,
-      available,
-      creditLimit: creditLimit ?? null,
-      utilizationPct: creditUtilizationPct(creditLimit, utilized),
-    };
-  }
-
-  return {
-    totalExpense,
-    totalIncome,
-    monthExpense,
-    monthIncome,
-    net: totalIncome - totalExpense,
-    monthNet: monthIncome - monthExpense,
-  };
 }
 
 function enrichAccount(
@@ -189,23 +136,42 @@ export const listWithUsage = query({
       decryptedRows.filter((a) => a.type === "bank").map((b) => [b._id, b]),
     );
 
-    const transactions = await ctx.db
+    const transactions = (await ctx.db
       .query("transactions")
       .withIndex("by_user", (q) => q.eq("userId", userId))
-      .collect();
+      .collect()) as LedgerTx[];
+
+    const linkedByBank = new Map<string, string[]>();
+    for (const acc of decryptedRows) {
+      if (
+        (acc.type === "debit" || acc.type === "wallet") &&
+        acc.linkedBankAccountId
+      ) {
+        const key = acc.linkedBankAccountId as string;
+        const list = linkedByBank.get(key) ?? [];
+        list.push(acc._id);
+        linkedByBank.set(key, list);
+      }
+    }
 
     return decryptedRows
-      .map((acc) => ({
-        ...enrichAccount(acc, banksById),
-        usage: computeUsage(
+      .map((acc) => {
+        const usage = computeAccountUsage(
           acc._id,
           acc.type,
           acc.creditLimit,
           acc.initialUtilized,
+          acc.currentBalance,
           transactions,
           month,
-        ),
-      }))
+          acc.type === "bank" ? (linkedByBank.get(acc._id) ?? []) : [],
+        );
+        return {
+          ...enrichAccount(acc, banksById),
+          usage,
+          ledgerBalance: usage.ledgerBalance ?? null,
+        };
+      })
       .sort((a, b) => a.name.localeCompare(b.name));
   },
 });
@@ -418,6 +384,26 @@ export const remove = mutation({
       .collect();
     for (const e of emis) {
       if (e.accountId === args.id) await ctx.db.patch(e._id, { accountId: undefined });
+    }
+
+    const investments = await ctx.db
+      .query("investments")
+      .withIndex("by_user", (q) => q.eq("userId", userId))
+      .collect();
+    for (const inv of investments) {
+      if (inv.accountId === args.id) {
+        await ctx.db.patch(inv._id, { accountId: undefined });
+      }
+    }
+
+    const transferDest = await ctx.db
+      .query("transactions")
+      .withIndex("by_user", (q) => q.eq("userId", userId))
+      .collect();
+    for (const tx of transferDest) {
+      if (tx.transferToAccountId === args.id) {
+        await ctx.db.patch(tx._id, { transferToAccountId: undefined });
+      }
     }
 
     await ctx.db.delete(args.id);

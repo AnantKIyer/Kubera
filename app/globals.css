@@ -4,60 +4,60 @@
 
 @layer base {
   :root {
-    /* Warm crumpled paper base */
-    --background: 38 32% 90%;
-    --foreground: 200 18% 16%;
+    /* System-like cool wash — content first, brand via primary only */
+    --background: 150 8% 96%;
+    --foreground: 160 10% 12%;
 
-    --card: 40 34% 95%;
-    --card-foreground: 200 18% 16%;
+    --card: 0 0% 100%;
+    --card-foreground: 160 10% 12%;
 
-    --muted: 38 20% 88%;
-    --muted-foreground: 200 12% 38%;
+    --muted: 150 6% 93%;
+    --muted-foreground: 160 6% 42%;
 
     --primary: 152 38% 34%;
-    --primary-foreground: 40 40% 98%;
+    --primary-foreground: 0 0% 100%;
 
-    --secondary: 38 22% 86%;
-    --secondary-foreground: 200 15% 22%;
+    --secondary: 150 8% 94%;
+    --secondary-foreground: 160 10% 18%;
 
-    --accent: 152 28% 88%;
+    --accent: 152 22% 94%;
     --accent-foreground: 152 38% 26%;
 
-    --border: 38 18% 78%;
-    --input: 38 18% 78%;
+    --border: 150 8% 88%;
+    --input: 150 8% 88%;
     --ring: 152 38% 34%;
 
-    --income: 152 42% 30%;
-    --expense: 8 58% 44%;
+    --income: 152 42% 32%;
+    --expense: 8 58% 46%;
 
-    --radius: 0.9rem;
+    /* iOS-adjacent continuous corners */
+    --radius: 0.875rem;
   }
 
   .dark {
-    /* Warm charcoal & forest sage — richer dark */
-    --background: 200 14% 9%;
-    --foreground: 40 18% 94%;
+    --background: 200 8% 7%;
+    --foreground: 40 8% 96%;
 
-    --card: 200 12% 12%;
-    --card-foreground: 40 18% 94%;
+    --card: 200 8% 11%;
+    --card-foreground: 40 8% 96%;
 
-    --muted: 200 10% 16%;
-    --muted-foreground: 40 10% 68%;
+    --muted: 200 6% 14%;
+    --muted-foreground: 40 6% 62%;
 
-    --primary: 152 32% 50%;
-    --primary-foreground: 200 14% 9%;
+    --primary: 152 34% 48%;
+    --primary-foreground: 200 10% 6%;
 
-    --secondary: 200 10% 15%;
-    --secondary-foreground: 40 15% 90%;
+    --secondary: 200 6% 14%;
+    --secondary-foreground: 40 8% 92%;
 
-    --accent: 152 18% 16%;
-    --accent-foreground: 152 28% 74%;
+    --accent: 152 14% 14%;
+    --accent-foreground: 152 28% 72%;
 
-    --border: 200 10% 22%;
-    --input: 200 10% 22%;
-    --ring: 152 32% 50%;
+    --border: 200 6% 18%;
+    --input: 200 6% 18%;
+    --ring: 152 34% 48%;
 
-    --income: 152 36% 54%;
+    --income: 152 36% 52%;
     --expense: 10 48% 58%;
   }
 }
@@ -68,19 +68,28 @@
   }
 
   html {
-    /* Avoid scroll chaining jank in installed PWAs */
     overscroll-behavior-y: none;
+    /* Rem root scales with browser/OS text size (Dynamic Type analogue on web) */
+    font-size: 100%;
   }
 
   body {
-    @apply text-foreground;
-    font-feature-settings: "cv11", "ss01";
+    @apply text-foreground text-base;
+    font-feature-settings: "ss01", "cv11";
     -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    letter-spacing: -0.011em;
+  }
+
+  /* Large titles: Apple-like optical tightening */
+  h1,
+  h2,
+  h3 {
+    letter-spacing: -0.025em;
   }
 
   @media (pointer: coarse) {
     body {
-      /* Prefer scroll throughput over glyph polish on phones */
       text-rendering: optimizeSpeed;
     }
   }
@@ -99,191 +108,207 @@
 
 @layer utilities {
   /*
-   * Mobile-first paper: solid color + one cheap gradient.
-   * The crumpled layers + SVG turbulence were forcing full-frame
-   * compositing on every scroll tick in Android PWAs.
+   * Calm continuous surface — light depth without crumpled-paper noise.
+   * Defer to content; atmosphere stays in the periphery.
    */
   .paper-surface {
     position: relative;
     min-height: 100%;
-    background-color: hsl(38 32% 90%);
+    background-color: hsl(var(--background));
     background-image: linear-gradient(
-      168deg,
-      hsl(40 34% 93%) 0%,
-      hsl(36 28% 88%) 42%,
-      hsl(34 26% 86%) 100%
+      180deg,
+      hsl(150 10% 97%) 0%,
+      hsl(var(--background)) 42%,
+      hsl(150 6% 94%) 100%
     );
   }
 
   .dark .paper-surface {
-    background-color: hsl(200 14% 9%);
+    background-color: hsl(var(--background));
     background-image: linear-gradient(
-      165deg,
-      hsl(200 14% 10%) 0%,
-      hsl(200 12% 8%) 50%,
-      hsl(200 10% 7%) 100%
+      180deg,
+      hsl(200 8% 9%) 0%,
+      hsl(var(--background)) 50%,
+      hsl(200 8% 5%) 100%
     );
   }
 
-  /* Rich crumpled paper — fine pointer / desktop only */
   @media (hover: hover) and (pointer: fine) {
     .paper-surface {
-      background-image: none;
-    }
-
-    .paper-surface::before,
-    .paper-surface::after {
-      content: "";
-      position: absolute;
-      inset: 0;
-      pointer-events: none;
-      z-index: -1;
-    }
-
-    .paper-surface::before {
-      background-color: hsl(38 32% 90%);
       background-image:
-        linear-gradient(
-          112deg,
-          transparent 38%,
-          hsl(28 22% 42% / 0.07) 47%,
-          hsl(42 38% 97% / 0.14) 50%,
-          hsl(28 20% 45% / 0.05) 53%,
-          transparent 62%
+        radial-gradient(
+          80% 50% at 50% -10%,
+          hsl(var(--primary) / 0.06),
+          transparent 55%
         ),
         linear-gradient(
-          28deg,
-          transparent 30%,
-          hsl(30 18% 40% / 0.06) 44%,
-          hsl(40 35% 96% / 0.12) 50%,
-          hsl(32 16% 48% / 0.04) 56%,
-          transparent 68%
-        ),
-        linear-gradient(
-          -18deg,
-          transparent 55%,
-          hsl(28 20% 44% / 0.055) 49.5%,
-          hsl(38 32% 94% / 0.1) 50.5%,
-          transparent 72%
-        ),
-        linear-gradient(
-          78deg,
-          transparent 62%,
-          hsl(30 15% 50% / 0.04) 48%,
-          transparent 78%
-        ),
-        radial-gradient(ellipse 55% 40% at 22% 28%, hsl(42 40% 98% / 0.55), transparent 68%),
-        radial-gradient(ellipse 45% 35% at 68% 18%, hsl(30 22% 72% / 0.14), transparent 62%),
-        radial-gradient(ellipse 60% 50% at 82% 72%, hsl(28 20% 65% / 0.16), transparent 65%),
-        radial-gradient(ellipse 50% 45% at 12% 78%, hsl(32 18% 70% / 0.12), transparent 60%),
-        radial-gradient(ellipse 70% 55% at 48% 52%, hsl(30 16% 78% / 0.1), transparent 72%),
-        radial-gradient(ellipse 40% 30% at 55% 22%, hsl(40 35% 96% / 0.35), transparent 58%),
-        linear-gradient(
-          168deg,
-          hsl(40 34% 93%) 0%,
-          hsl(36 28% 88%) 42%,
-          hsl(34 26% 86%) 100%
-        );
-      background-size: 100% 100%;
-    }
-
-    .dark .paper-surface::before {
-      background-color: hsl(200 14% 9%);
-      background-image:
-        linear-gradient(
-          112deg,
-          transparent 38%,
-          hsl(200 8% 4% / 0.35) 47%,
-          hsl(40 10% 22% / 0.12) 50%,
-          hsl(200 8% 6% / 0.25) 53%,
-          transparent 62%
-        ),
-        linear-gradient(
-          28deg,
-          transparent 30%,
-          hsl(200 10% 5% / 0.3) 44%,
-          hsl(40 8% 20% / 0.1) 50%,
-          hsl(200 8% 8% / 0.22) 56%,
-          transparent 68%
-        ),
-        linear-gradient(
-          -18deg,
-          transparent 55%,
-          hsl(200 8% 6% / 0.28) 49.5%,
-          hsl(40 6% 18% / 0.08) 50.5%,
-          transparent 72%
-        ),
-        radial-gradient(ellipse 55% 40% at 22% 28%, hsl(40 8% 18% / 0.15), transparent 68%),
-        radial-gradient(ellipse 45% 35% at 68% 18%, hsl(200 12% 6% / 0.4), transparent 62%),
-        radial-gradient(ellipse 60% 50% at 82% 72%, hsl(200 10% 5% / 0.45), transparent 65%),
-        radial-gradient(ellipse 50% 45% at 12% 78%, hsl(200 12% 7% / 0.35), transparent 60%),
-        radial-gradient(ellipse 70% 55% at 48% 52%, hsl(200 8% 8% / 0.3), transparent 72%),
-        linear-gradient(
-          168deg,
-          hsl(200 14% 10%) 0%,
-          hsl(200 12% 8%) 50%,
-          hsl(200 10% 7%) 100%
+          180deg,
+          hsl(150 10% 97.5%) 0%,
+          hsl(var(--background)) 48%,
+          hsl(150 6% 94.5%) 100%
         );
     }
 
-    /* Soft grain only — no SVG feTurbulence (GPU poison on scroll) */
-    .paper-surface::after {
-      opacity: 0.35;
-      mix-blend-mode: multiply;
-      background-image: radial-gradient(
-        circle at 1px 1px,
-        hsl(28 20% 40% / 0.18) 1px,
-        transparent 0
-      );
-      background-size: 3px 3px;
-    }
-
-    .dark .paper-surface::after {
-      opacity: 0.28;
-      mix-blend-mode: soft-light;
-      background-image: radial-gradient(
-        circle at 1px 1px,
-        hsl(40 10% 90% / 0.14) 1px,
-        transparent 0
-      );
+    .dark .paper-surface {
+      background-image:
+        radial-gradient(
+          70% 40% at 50% -8%,
+          hsl(var(--primary) / 0.1),
+          transparent 55%
+        ),
+        linear-gradient(
+          180deg,
+          hsl(200 8% 9%) 0%,
+          hsl(var(--background)) 50%,
+          hsl(200 8% 5%) 100%
+        );
     }
   }
-}
 
-@layer utilities {
   .text-balance {
     text-wrap: balance;
   }
 
   .bg-calm-gradient {
     background: linear-gradient(
-      168deg,
-      hsl(40 34% 93%) 0%,
-      hsl(36 28% 88%) 42%,
-      hsl(34 26% 86%) 100%
+      180deg,
+      hsl(0 0% 100%) 0%,
+      hsl(150 8% 97%) 100%
     );
   }
 
   .dark .bg-calm-gradient {
     background: linear-gradient(
-      165deg,
-      hsl(var(--background)) 0%,
-      hsl(200 10% 12%) 50%,
-      hsl(152 10% 11%) 100%
+      180deg,
+      hsl(var(--card)) 0%,
+      hsl(200 8% 9%) 100%
     );
   }
 
   .bg-aurora {
-    background-image:
-      radial-gradient(70% 50% at 100% 0%, hsl(var(--primary) / 0.12), transparent 70%),
-      radial-gradient(50% 40% at 0% 100%, hsl(var(--accent) / 0.65), transparent 70%);
+    background-image: radial-gradient(
+      90% 80% at 100% 0%,
+      hsl(var(--primary) / 0.08),
+      transparent 60%
+    );
   }
 
+  /* Frosted chrome — sidebar, mobile bars (functional layer only) */
   .glass {
-    @apply bg-card;
+    background-color: hsl(var(--card) / 0.72);
+    backdrop-filter: saturate(180%) blur(20px);
+    -webkit-backdrop-filter: saturate(180%) blur(20px);
   }
 
-  /* Skip enter animations on touch — they compete with scroll compositing */
+  .dark .glass {
+    background-color: hsl(var(--card) / 0.78);
+  }
+
+  @media (prefers-reduced-transparency: reduce) {
+    .glass {
+      background-color: hsl(var(--card));
+      backdrop-filter: none;
+      -webkit-backdrop-filter: none;
+    }
+  }
+
+  /* Scroll edge fade under sticky chrome */
+  .scroll-edge-fade {
+    mask-image: linear-gradient(
+      to bottom,
+      transparent 0,
+      #000 0.75rem,
+      #000 calc(100% - 0.75rem),
+      transparent 100%
+    );
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .animate-pulse {
+      animation: none !important;
+      opacity: 0.55;
+    }
+  }
+
+  /* Minimum readable text floor (~11pt) */
+  .text-caption {
+    font-size: max(0.6875rem, 11px);
+    line-height: 1.35;
+  }
+
+  /* Grouped list / inset control fill */
+  .surface-grouped {
+    @apply rounded-2xl bg-card;
+    box-shadow: 0 0 0 0.5px hsl(var(--border) / 0.9);
+  }
+
+  /*
+   * Clerk auth shell — neutralize dark footer / overflow badges.
+   * Never clip field labels (overflow:hidden caused “Password” → “assword”).
+   */
+  .kubera-clerk-shell,
+  .kubera-clerk-shell .cl-card,
+  .kubera-clerk-shell .cl-cardBox,
+  .kubera-clerk-shell .cl-main,
+  .kubera-clerk-shell .cl-scrollBox,
+  .kubera-clerk-shell .cl-form,
+  .kubera-clerk-shell .cl-formField,
+  .kubera-clerk-shell .cl-formFieldRow,
+  .kubera-clerk-shell .cl-formFieldLabelRow {
+    overflow: visible !important;
+  }
+
+  .kubera-clerk-shell .cl-footer,
+  .kubera-clerk-shell .cl-internal-1d48i9d,
+  .kubera-clerk-shell [class*="cl-footer"] {
+    background: transparent !important;
+    background-image: none !important;
+    box-shadow: none !important;
+  }
+
+  .kubera-clerk-shell .cl-card,
+  .kubera-clerk-shell .cl-cardBox,
+  .kubera-clerk-shell .cl-main,
+  .kubera-clerk-shell .cl-scrollBox {
+    background: transparent !important;
+    box-shadow: none !important;
+  }
+
+  .kubera-clerk-shell .cl-formFieldLabel {
+    overflow: visible !important;
+    clip-path: none !important;
+    text-overflow: clip !important;
+  }
+
+  .kubera-clerk-shell .cl-formButtonPrimary {
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    line-height: 1 !important;
+  }
+
+  /* Clerk’s continue chevron often renders as a tiny grey fleck — drop it */
+  .kubera-clerk-shell .cl-formButtonPrimary svg,
+  .kubera-clerk-shell .cl-buttonArrowIcon,
+  .kubera-clerk-shell .cl-formButtonPrimaryIcon {
+    display: none !important;
+  }
+
+  .kubera-clerk-shell .cl-socialButtonsBlockButton {
+    overflow: hidden;
+  }
+
+  /* Development mode ribbon — compact chip, not a black bar */
+  .kubera-clerk-shell a[href*="clerk.com"][href*="development"],
+  .kubera-clerk-shell .cl-internal-b3fm6y {
+    background: hsl(32 90% 42% / 0.12) !important;
+    color: hsl(32 90% 42%) !important;
+    border-radius: 999px !important;
+    padding: 0.2rem 0.55rem !important;
+    font-size: 11px !important;
+    font-weight: 500 !important;
+  }
+
   @media (pointer: coarse) {
     .animate-fade-in,
     .animate-scale-in,
@@ -309,18 +334,28 @@
   }
 
   .pb-mobile-nav {
-    padding-bottom: calc(4.5rem + env(safe-area-inset-bottom, 0px));
+    /* Tab bar ~44pt + labels + safe area */
+    padding-bottom: calc(5.25rem + env(safe-area-inset-bottom, 0px));
   }
 }
 
 ::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
+  width: 0;
+  height: 0;
 }
-::-webkit-scrollbar-track {
-  background: transparent;
-}
-::-webkit-scrollbar-thumb {
-  background: hsl(var(--muted-foreground) / 0.18);
-  border-radius: 9999px;
+
+@media (hover: hover) and (pointer: fine) {
+  ::-webkit-scrollbar {
+    width: 9px;
+    height: 9px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: hsl(var(--muted-foreground) / 0.2);
+    border-radius: 9999px;
+    border: 2px solid transparent;
+    background-clip: padding-box;
+  }
 }

@@ -1,9 +1,10 @@
 "use client";
 
 import { ReactNode, useMemo } from "react";
-import { ConvexAuthProvider } from "@convex-dev/auth/react";
-import { ConvexReactClient } from "convex/react";
+import { ClerkProvider } from "@clerk/nextjs";
+import { ConvexProviderWithAuth, ConvexReactClient } from "convex/react";
 import { ThemeProvider } from "@/components/theme-provider";
+import { useAuthForConvex } from "@/lib/convex-clerk-auth";
 
 function normalizeConvexUrl(raw: string | undefined): string | undefined {
   if (!raw) return undefined;
@@ -11,7 +12,6 @@ function normalizeConvexUrl(raw: string | undefined): string | undefined {
   let value = raw.trim();
   if (!value) return undefined;
 
-  // Common copy-paste mistake: entire env line used as the value.
   const keyPrefix = "NEXT_PUBLIC_CONVEX_URL=";
   if (value.startsWith(keyPrefix)) {
     value = value.slice(keyPrefix.length).trim();
@@ -21,6 +21,7 @@ function normalizeConvexUrl(raw: string | undefined): string | undefined {
 }
 
 const convexUrl = normalizeConvexUrl(process.env.NEXT_PUBLIC_CONVEX_URL);
+const clerkPublishableKey = process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY;
 
 export function Providers({ children }: { children: ReactNode }) {
   const client = useMemo(
@@ -42,9 +43,33 @@ export function Providers({ children }: { children: ReactNode }) {
     );
   }
 
+  if (!clerkPublishableKey) {
+    return (
+      <div className="flex min-h-screen items-center justify-center p-8 text-center">
+        <div className="max-w-md space-y-3">
+          <h1 className="text-xl font-semibold">Clerk is not configured</h1>
+          <p className="text-sm text-muted-foreground">
+            Set{" "}
+            <code className="rounded bg-muted px-1.5 py-0.5">
+              NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY
+            </code>{" "}
+            in <code className="rounded bg-muted px-1.5 py-0.5">.env.local</code>.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <ConvexAuthProvider client={client}>
-      <ThemeProvider>{children}</ThemeProvider>
-    </ConvexAuthProvider>
+    <ClerkProvider
+      publishableKey={clerkPublishableKey}
+      signInUrl="/sign-in"
+      signUpUrl="/sign-up"
+      afterSignOutUrl="/sign-in"
+    >
+      <ConvexProviderWithAuth client={client} useAuth={useAuthForConvex}>
+        <ThemeProvider>{children}</ThemeProvider>
+      </ConvexProviderWithAuth>
+    </ClerkProvider>
   );
 }

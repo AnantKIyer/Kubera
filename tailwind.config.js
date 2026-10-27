@@ -49,23 +49,34 @@ module.exports = {
         sm: "calc(var(--radius) - 4px)",
       },
       fontFamily: {
-        sans: ["var(--font-sans)", "system-ui", "sans-serif"],
+        sans: [
+          "var(--font-sans)",
+          "-apple-system",
+          "BlinkMacSystemFont",
+          "Segoe UI",
+          "system-ui",
+          "sans-serif",
+        ],
       },
       boxShadow: {
-        soft: "0 1px 3px 0 rgb(0 0 0 / 0.06), 0 8px 24px -10px rgb(0 0 0 / 0.12)",
-        glow: "0 2px 16px -4px hsl(var(--primary) / 0.35)",
+        soft: "0 1px 2px rgb(0 0 0 / 0.04), 0 4px 16px -6px rgb(0 0 0 / 0.08)",
+        glow: "0 1px 8px -2px hsl(var(--primary) / 0.22)",
+        sheet: "0 -8px 40px rgb(0 0 0 / 0.12)",
+      },
+      transitionTimingFunction: {
+        spring: "cubic-bezier(0.22, 1, 0.36, 1)",
       },
       keyframes: {
         "fade-in": {
-          from: { opacity: "0", transform: "translateY(6px)" },
+          from: { opacity: "0", transform: "translateY(4px)" },
           to: { opacity: "1", transform: "translateY(0)" },
         },
         "scale-in": {
-          from: { opacity: "0", transform: "scale(0.96)" },
+          from: { opacity: "0", transform: "scale(0.98)" },
           to: { opacity: "1", transform: "scale(1)" },
         },
         "slide-up": {
-          from: { opacity: "0", transform: "translateY(16px)" },
+          from: { opacity: "0", transform: "translateY(12px)" },
           to: { opacity: "1", transform: "translateY(0)" },
         },
         shimmer: {
@@ -73,9 +84,9 @@ module.exports = {
         },
       },
       animation: {
-        "fade-in": "fade-in 0.25s ease-out both",
-        "scale-in": "scale-in 0.18s ease-out both",
-        "slide-up": "slide-up 0.28s cubic-bezier(0.22, 1, 0.36, 1) both",
+        "fade-in": "fade-in 0.32s cubic-bezier(0.22, 1, 0.36, 1) both",
+        "scale-in": "scale-in 0.28s cubic-bezier(0.22, 1, 0.36, 1) both",
+        "slide-up": "slide-up 0.36s cubic-bezier(0.22, 1, 0.36, 1) both",
       },
     },
   },

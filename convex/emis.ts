@@ -5,7 +5,6 @@ import { requireUserId } from "./lib/user";
 import {
   analyzeEmiPayment,
   assertInstallmentDateNotPast,
-  buildEmiPaymentPatch,
   clampInstallmentDate,
   expectedEmiForLoan,
   getExtraPaymentMessage,
@@ -13,27 +12,29 @@ import {
   resolveLoanTerms,
 } from "./lib/emi";
 import {
+  enrichRemainingPrincipal,
+  recomputeEmiSchedule,
+} from "./lib/scheduleRecompute";
+import { assertOwnedAccount, assertOwnedCategory } from "./lib/ownership";
+import {
   decryptAccounts,
   decryptEmis,
   encryptEmiFields,
+  encryptTransactionFields,
 } from "./lib/sensitiveFields";
 
 function enrichEmi(
   emi: Doc<"emis">,
-  totalPaid: number,
+  payments: { amount: number }[],
   category?: Doc<"categories">,
   account?: Doc<"accounts">,
 ) {
   const expectedEmi = expectedEmiForLoan(emi);
   const tenure = emi.tenureMonths ?? emi.totalInstallments ?? null;
-  const estimatedPaid = Math.max(
-    totalPaid,
-    (emi.paidInstallments ?? 0) * expectedEmi,
+  const { remainingPrincipal, totalPaid, progress } = enrichRemainingPrincipal(
+    emi,
+    payments,
   );
-  const progress =
-    emi.principalAmount != null && emi.principalAmount > 0
-      ? Math.min(1, estimatedPaid / emi.principalAmount)
-      : null;
 
   return {
     ...emi,
@@ -42,10 +43,9 @@ function enrichEmi(
     accountName: account?.name ?? null,
     accountColor: account?.color ?? null,
     expectedEmi,
-    totalPaid: estimatedPaid,
+    totalPaid,
     progress,
-    remainingPrincipal:
-      emi.principalAmount != null ? Math.max(0, emi.principalAmount - estimatedPaid) : null,
+    remainingPrincipal,
     tenureMonths: tenure,
   };
 }
@@ -81,10 +81,12 @@ export const list = query({
       .withIndex("by_user", (q) => q.eq("userId", userId))
       .collect();
 
-    const paidByEmi = new Map<string, number>();
+    const paymentsByEmi = new Map<string, { amount: number }[]>();
     for (const tx of transactions) {
       if (tx.emiId && tx.type === "expense") {
-        paidByEmi.set(tx.emiId, (paidByEmi.get(tx.emiId) ?? 0) + tx.amount);
+        const list = paymentsByEmi.get(tx.emiId) ?? [];
+        list.push({ amount: tx.amount });
+        paymentsByEmi.set(tx.emiId, list);
       }
     }
 
@@ -94,7 +96,7 @@ export const list = query({
       .map((e) => {
         const category = e.categoryId ? categories.get(e.categoryId) : undefined;
         const account = e.accountId ? accounts.get(e.accountId) : undefined;
-        return enrichEmi(e, paidByEmi.get(e._id) ?? 0, category, account);
+        return enrichEmi(e, paymentsByEmi.get(e._id) ?? [], category, account);
       })
       .sort((a, b) => b.amount - a.amount);
   },
@@ -151,6 +153,8 @@ export const create = mutation({
   handler: async (ctx, args) => {
     const userId = await requireUserId(ctx);
     if (!(args.amount > 0)) throw new Error("EMI amount must be greater than 0");
+    await assertOwnedCategory(ctx, userId, args.categoryId);
+    await assertOwnedAccount(ctx, userId, args.accountId);
 
     const tenure = args.tenureMonths ?? args.totalInstallments;
     const resolved = resolveExpectedEmi({
@@ -237,8 +241,14 @@ export const update = mutation({
       const sensitive = await encryptEmiFields({ lender: rest.lender?.trim() || null });
       patch.lender = sensitive.lender;
     }
-    if (rest.categoryId !== undefined) patch.categoryId = rest.categoryId ?? undefined;
-    if (rest.accountId !== undefined) patch.accountId = rest.accountId ?? undefined;
+    if (rest.categoryId !== undefined) {
+      await assertOwnedCategory(ctx, userId, rest.categoryId);
+      patch.categoryId = rest.categoryId ?? undefined;
+    }
+    if (rest.accountId !== undefined) {
+      await assertOwnedAccount(ctx, userId, rest.accountId);
+      patch.accountId = rest.accountId ?? undefined;
+    }
     if (rest.nextDebitDate !== undefined) {
       const next = rest.nextDebitDate ? clampInstallmentDate(rest.nextDebitDate) : undefined;
       assertInstallmentDateNotPast(next);
@@ -319,11 +329,20 @@ export const remove = mutation({
     const userId = await requireUserId(ctx);
     const current = await ctx.db.get(args.id);
     if (!current || current.userId !== userId) throw new Error("EMI not found");
+
+    const linked = await ctx.db
+      .query("transactions")
+      .withIndex("by_user_emi", (q) => q.eq("userId", userId).eq("emiId", args.id))
+      .collect();
+    for (const tx of linked) {
+      await ctx.db.patch(tx._id, { emiId: undefined });
+    }
+
     await ctx.db.delete(args.id);
   },
 });
 
-/** Record an EMI payment and advance next debit date */
+/** Record an EMI payment as a transaction and recompute the schedule */
 export const recordPayment = mutation({
   args: {
     id: v.id("emis"),
@@ -337,18 +356,44 @@ export const recordPayment = mutation({
     const emi = await ctx.db.get(args.id);
     if (!emi || emi.userId !== userId) throw new Error("EMI not found");
 
+    await assertOwnedCategory(ctx, userId, args.categoryId);
+    await assertOwnedAccount(ctx, userId, args.accountId);
+
     const paidAmount = args.amount != null && args.amount > 0 ? args.amount : emi.amount;
-    const result = buildEmiPaymentPatch(emi, args.paymentDate, paidAmount, {
-      accountId: args.accountId ?? undefined,
-      categoryId: args.categoryId ?? undefined,
+    const accountId = args.accountId !== undefined ? args.accountId ?? undefined : emi.accountId;
+    const categoryId =
+      args.categoryId !== undefined ? args.categoryId ?? undefined : emi.categoryId;
+
+    if (args.accountId !== undefined || args.categoryId !== undefined) {
+      await ctx.db.patch(args.id, {
+        accountId,
+        categoryId,
+      });
+    }
+
+    const sensitive = await encryptTransactionFields({
+      description: null,
+    });
+    await ctx.db.insert("transactions", {
+      userId,
+      type: "expense",
+      amount: paidAmount,
+      description: sensitive.description,
+      accountId,
+      categoryId,
+      emiId: args.id,
+      date: args.paymentDate,
     });
 
-    await ctx.db.patch(args.id, result.patch);
+    const feedback = await recomputeEmiSchedule(ctx, userId, args.id, {
+      feedbackForPaymentAmount: paidAmount,
+    });
+    const updated = await ctx.db.get(args.id);
     return {
-      nextDebitDate: result.patch.nextDebitDate as string | undefined,
-      paidInstallments: result.patch.paidInstallments as number,
-      feedback: result.feedback,
-      closed: result.closed,
+      nextDebitDate: updated?.nextDebitDate,
+      paidInstallments: updated?.paidInstallments ?? 0,
+      feedback,
+      closed: updated ? !updated.isActive : false,
     };
   },
 });

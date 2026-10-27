@@ -2,11 +2,14 @@ import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import { billingCycle } from "./schema";
 import { requireUserId } from "./lib/user";
-import { addBillingPeriod, type BillingCycle } from "./lib/subscriptionDates";
+import { assertOwnedAccount, assertOwnedCategory } from "./lib/ownership";
+import { recomputeSubscriptionSchedule } from "./lib/scheduleRecompute";
+import { type BillingCycle } from "./lib/subscriptionDates";
 import {
   decryptAccounts,
   decryptSubscriptions,
   encryptSubscriptionFields,
+  encryptTransactionFields,
 } from "./lib/sensitiveFields";
 
 export function monthlyEquivalent(
@@ -108,6 +111,8 @@ export const create = mutation({
   handler: async (ctx, args) => {
     const userId = await requireUserId(ctx);
     if (!(args.amount > 0)) throw new Error("Amount must be greater than 0");
+    await assertOwnedCategory(ctx, userId, args.categoryId);
+    await assertOwnedAccount(ctx, userId, args.accountId);
     const sensitive = await encryptSubscriptionFields({
       name: args.name.trim(),
       notes: args.notes?.trim() || null,
@@ -154,8 +159,14 @@ export const update = mutation({
       patch.amount = rest.amount;
     }
     if (rest.billingCycle !== undefined) patch.billingCycle = rest.billingCycle;
-    if (rest.categoryId !== undefined) patch.categoryId = rest.categoryId ?? undefined;
-    if (rest.accountId !== undefined) patch.accountId = rest.accountId ?? undefined;
+    if (rest.categoryId !== undefined) {
+      await assertOwnedCategory(ctx, userId, rest.categoryId);
+      patch.categoryId = rest.categoryId ?? undefined;
+    }
+    if (rest.accountId !== undefined) {
+      await assertOwnedAccount(ctx, userId, rest.accountId);
+      patch.accountId = rest.accountId ?? undefined;
+    }
     if (rest.nextRenewalDate !== undefined) {
       patch.nextRenewalDate = rest.nextRenewalDate ?? undefined;
     }
@@ -174,11 +185,22 @@ export const remove = mutation({
     const userId = await requireUserId(ctx);
     const current = await ctx.db.get(args.id);
     if (!current || current.userId !== userId) throw new Error("Subscription not found");
+
+    const linked = await ctx.db
+      .query("transactions")
+      .withIndex("by_user_subscription", (q) =>
+        q.eq("userId", userId).eq("subscriptionId", args.id),
+      )
+      .collect();
+    for (const tx of linked) {
+      await ctx.db.patch(tx._id, { subscriptionId: undefined });
+    }
+
     await ctx.db.delete(args.id);
   },
 });
 
-/** Advance renewal from a recorded payment date */
+/** Record a subscription payment as a transaction and recompute renewal */
 export const recordPayment = mutation({
   args: {
     id: v.id("subscriptions"),
@@ -192,15 +214,32 @@ export const recordPayment = mutation({
     const sub = await ctx.db.get(args.id);
     if (!sub || sub.userId !== userId) throw new Error("Subscription not found");
 
-    const patch: Record<string, unknown> = {
-      nextRenewalDate: addBillingPeriod(args.paymentDate, sub.billingCycle),
-      isActive: true,
-    };
-    if (args.amount !== undefined && args.amount > 0) patch.amount = args.amount;
-    if (args.accountId !== undefined) patch.accountId = args.accountId ?? undefined;
-    if (args.categoryId !== undefined) patch.categoryId = args.categoryId ?? undefined;
+    await assertOwnedCategory(ctx, userId, args.categoryId);
+    await assertOwnedAccount(ctx, userId, args.accountId);
 
-    await ctx.db.patch(args.id, patch);
-    return { nextRenewalDate: patch.nextRenewalDate as string };
+    const paidAmount = args.amount != null && args.amount > 0 ? args.amount : sub.amount;
+    const accountId = args.accountId !== undefined ? args.accountId ?? undefined : sub.accountId;
+    const categoryId =
+      args.categoryId !== undefined ? args.categoryId ?? undefined : sub.categoryId;
+
+    if (args.accountId !== undefined || args.categoryId !== undefined) {
+      await ctx.db.patch(args.id, { accountId, categoryId, isActive: true });
+    }
+
+    const sensitive = await encryptTransactionFields({ description: null });
+    await ctx.db.insert("transactions", {
+      userId,
+      type: "expense",
+      amount: paidAmount,
+      description: sensitive.description,
+      accountId,
+      categoryId,
+      subscriptionId: args.id,
+      date: args.paymentDate,
+    });
+
+    await recomputeSubscriptionSchedule(ctx, userId, args.id);
+    const updated = await ctx.db.get(args.id);
+    return { nextRenewalDate: updated?.nextRenewalDate as string | undefined };
   },
 });
