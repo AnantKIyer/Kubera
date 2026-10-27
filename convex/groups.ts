@@ -1,6 +1,10 @@
 import { v } from "convex/values";
 import { mutation, query, MutationCtx, QueryCtx } from "./_generated/server";
 import { Id } from "./_generated/dataModel";
+import {
+  collectBalanceParticipantIds,
+  isActiveMember,
+} from "./lib/clerkLink";
 import { requireUserId } from "./lib/user";
 import {
   amountSplitShares,
@@ -55,7 +59,9 @@ async function requireMembership(
   userId: Id<"users">,
 ) {
   const membership = await getMembership(ctx, groupId, userId);
-  if (!membership) throw new Error("You are not a member of this group");
+  if (!membership || !isActiveMember(membership)) {
+    throw new Error("You are not a member of this group");
+  }
   return membership;
 }
 
@@ -64,6 +70,30 @@ async function getGroupMembers(ctx: DbCtx, groupId: Id<"expenseGroups">) {
     .query("expenseGroupMembers")
     .withIndex("by_group", (q) => q.eq("groupId", groupId))
     .collect();
+}
+
+async function getActiveGroupMembers(ctx: DbCtx, groupId: Id<"expenseGroups">) {
+  return (await getGroupMembers(ctx, groupId)).filter(isActiveMember);
+}
+
+/** Active members plus anyone still referenced by expenses/splits/settlements. */
+async function balanceParticipantIds(
+  ctx: DbCtx,
+  groupId: Id<"expenseGroups">,
+  expenses: { paidByUserId: Id<"users"> }[],
+  splits: { userId: Id<"users"> }[],
+  settlements: { fromUserId: Id<"users">; toUserId: Id<"users"> }[],
+) {
+  const members = await getGroupMembers(ctx, groupId);
+  return collectBalanceParticipantIds(
+    members.map((m) => m.userId),
+    expenses.map((e) => e.paidByUserId),
+    splits.map((s) => s.userId),
+    settlements.map((s) => ({
+      fromUserId: s.fromUserId,
+      toUserId: s.toUserId,
+    })),
+  ) as Id<"users">[];
 }
 
 async function userProfile(ctx: QueryCtx, userId: Id<"users">) {
@@ -141,21 +171,29 @@ export const listMyGroups = query({
   args: {},
   handler: async (ctx) => {
     const userId = await requireUserId(ctx);
-    const memberships = await ctx.db
-      .query("expenseGroupMembers")
-      .withIndex("by_user", (q) => q.eq("userId", userId))
-      .collect();
+    const memberships = (
+      await ctx.db
+        .query("expenseGroupMembers")
+        .withIndex("by_user", (q) => q.eq("userId", userId))
+        .collect()
+    ).filter(isActiveMember);
 
     const groups = await Promise.all(
       memberships.map(async (m) => {
         const raw = await ctx.db.get(m.groupId);
         if (!raw) return null;
         const group = await decryptGroup(raw);
-        const members = await getGroupMembers(ctx, m.groupId);
+        const activeMembers = await getActiveGroupMembers(ctx, m.groupId);
         const { expenses, splits } = await getGroupExpensesAndSplits(ctx, m.groupId);
         const settlements = await getGroupSettlements(ctx, m.groupId);
 
-        const memberIds = members.map((mb) => mb.userId);
+        const memberIds = await balanceParticipantIds(
+          ctx,
+          m.groupId,
+          expenses,
+          splits,
+          settlements,
+        );
         const balances = computeMemberBalances(expenses, splits, memberIds, settlements);
         const myBalance = balances.find((b) => b.userId === userId)?.net ?? 0;
 
@@ -167,7 +205,7 @@ export const listMyGroups = query({
           shareId: group.shareId ?? null,
           shareIdLabel: group.shareId ? formatShareId(group.shareId) : null,
           role: m.role,
-          memberCount: members.length,
+          memberCount: activeMembers.length,
           expenseCount: expenses.length,
           myNetBalance: myBalance,
         };
@@ -184,10 +222,12 @@ export const listSummary = query({
   args: {},
   handler: async (ctx) => {
     const userId = await requireUserId(ctx);
-    const memberships = await ctx.db
-      .query("expenseGroupMembers")
-      .withIndex("by_user", (q) => q.eq("userId", userId))
-      .collect();
+    const memberships = (
+      await ctx.db
+        .query("expenseGroupMembers")
+        .withIndex("by_user", (q) => q.eq("userId", userId))
+        .collect()
+    ).filter(isActiveMember);
 
     let totalOwedToMe = 0;
     let totalIOwe = 0;
@@ -195,13 +235,14 @@ export const listSummary = query({
     for (const m of memberships) {
       const { expenses, splits } = await getGroupExpensesAndSplits(ctx, m.groupId);
       const settlements = await getGroupSettlements(ctx, m.groupId);
-      const members = await getGroupMembers(ctx, m.groupId);
-      const balances = computeMemberBalances(
+      const memberIds = await balanceParticipantIds(
+        ctx,
+        m.groupId,
         expenses,
         splits,
-        members.map((mb) => mb.userId),
         settlements,
       );
+      const balances = computeMemberBalances(expenses, splits, memberIds, settlements);
       const myBalance = balances.find((b) => b.userId === userId)?.net ?? 0;
       if (myBalance > 0.005) totalOwedToMe += myBalance;
       if (myBalance < -0.005) totalIOwe += -myBalance;
@@ -222,7 +263,7 @@ export const previewByShareId = query({
     const group = await findGroupByShareId(ctx, raw);
     if (!group) return null;
     const decrypted = await decryptGroup(group);
-    const members = await getGroupMembers(ctx, group._id);
+    const members = await getActiveGroupMembers(ctx, group._id);
     return {
       groupId: group._id,
       name: decrypted.name,
@@ -278,18 +319,27 @@ export const getDetail = query({
   handler: async (ctx, { groupId }) => {
     const userId = await requireUserId(ctx);
     const membership = await getMembership(ctx, groupId, userId);
-    if (!membership) return null;
+    if (!membership || !isActiveMember(membership)) return null;
 
     const rawGroup = await ctx.db.get(groupId);
     if (!rawGroup) return null;
     const group = await decryptGroup(rawGroup);
 
-    const memberRows = await getGroupMembers(ctx, groupId);
+    const allMemberRows = await getGroupMembers(ctx, groupId);
+    const memberRows = allMemberRows.filter(isActiveMember);
     const memberProfiles = await Promise.all(
       memberRows.map(async (m) => ({
         ...(await userProfile(ctx, m.userId))!,
         role: m.role,
         membershipId: m._id,
+      })),
+    );
+    const historyProfiles = await Promise.all(
+      allMemberRows.map(async (m) => ({
+        ...(await userProfile(ctx, m.userId))!,
+        role: m.role,
+        membershipId: m._id,
+        leftAt: m.leftAt ?? null,
       })),
     );
 
@@ -315,10 +365,21 @@ export const getDetail = query({
       a.date === b.date ? b._creationTime - a._creationTime : b.date.localeCompare(a.date),
     );
 
-    const memberIds = memberRows.map((m) => m.userId);
-    const balances = computeMemberBalances(rawExpenses, allSplits, memberIds, rawSettlements);
+    const balanceIds = await balanceParticipantIds(
+      ctx,
+      groupId,
+      rawExpenses,
+      allSplits,
+      rawSettlements,
+    );
+    const balances = computeMemberBalances(
+      rawExpenses,
+      allSplits,
+      balanceIds,
+      rawSettlements,
+    );
     const debts = simplifyDebts(balances);
-    const otherMemberIds = memberIds.filter((id) => id !== userId);
+    const otherMemberIds = balanceIds.filter((id) => id !== userId);
     const pairwiseWithMe = computePairwiseDebtsWithUser(
       userId,
       rawExpenses,
@@ -327,7 +388,15 @@ export const getDetail = query({
       rawSettlements,
     );
 
-    const profileById = new Map(memberProfiles.map((p) => [p.userId, p]));
+    const profileById = new Map(
+      historyProfiles.filter((p) => p.userId).map((p) => [p.userId, p]),
+    );
+    for (const id of balanceIds) {
+      if (!profileById.has(id)) {
+        const profile = await userProfile(ctx, id);
+        if (profile) profileById.set(id, { ...profile, role: "member", membershipId: undefined as never, leftAt: null });
+      }
+    }
 
     const expenses = await Promise.all(
       rawExpenses.map(async (raw) => {
@@ -567,7 +636,11 @@ export const create = mutation({
       if (!user || user._id === userId) continue;
 
       const existing = await getMembership(ctx, groupId, user._id);
-      if (existing) continue;
+      if (existing && isActiveMember(existing)) continue;
+      if (existing) {
+        await ctx.db.patch(existing._id, { leftAt: undefined });
+        continue;
+      }
 
       await ctx.db.insert("expenseGroupMembers", {
         groupId,
@@ -606,7 +679,9 @@ export const requestJoin = mutation({
     if (!group) throw new Error("Invalid share ID — check the code and try again");
 
     const existingMember = await getMembership(ctx, group._id, userId);
-    if (existingMember) throw new Error("You are already in this group");
+    if (existingMember && isActiveMember(existingMember)) {
+      throw new Error("You are already in this group");
+    }
 
     const pending = await getPendingJoinRequest(ctx, group._id, userId);
     if (pending) throw new Error("You already have a pending request for this group");
@@ -641,7 +716,9 @@ export const approveJoinRequest = mutation({
     }
 
     const existingMember = await getMembership(ctx, request.groupId, request.userId);
-    if (!existingMember) {
+    if (existingMember) {
+      await ctx.db.patch(existingMember._id, { leftAt: undefined });
+    } else {
       await ctx.db.insert("expenseGroupMembers", {
         groupId: request.groupId,
         userId: request.userId,
@@ -700,7 +777,13 @@ export const addMember = mutation({
     if (user._id === userId) throw new Error("You are already in this group");
 
     const existing = await getMembership(ctx, groupId, user._id);
-    if (existing) throw new Error("This person is already in the group");
+    if (existing && isActiveMember(existing)) {
+      throw new Error("This person is already in the group");
+    }
+    if (existing) {
+      await ctx.db.patch(existing._id, { leftAt: undefined });
+      return;
+    }
 
     await ctx.db.insert("expenseGroupMembers", {
       groupId,
@@ -726,8 +809,8 @@ export const removeMember = mutation({
     }
 
     const target = await getMembership(ctx, groupId, memberUserId);
-    if (!target) throw new Error("Member not found");
-    await ctx.db.delete(target._id);
+    if (!target || !isActiveMember(target)) throw new Error("Member not found");
+    await ctx.db.patch(target._id, { leftAt: Date.now() });
   },
 });
 
@@ -739,7 +822,7 @@ export const leave = mutation({
     if (membership.role === "owner") {
       throw new Error("Owners cannot leave — delete the group or transfer ownership first");
     }
-    await ctx.db.delete(membership._id);
+    await ctx.db.patch(membership._id, { leftAt: Date.now() });
   },
 });
 
@@ -814,7 +897,7 @@ export const createExpense = mutation({
     const description = args.description.trim();
     if (!description) throw new Error("Description is required");
 
-    const members = await getGroupMembers(ctx, args.groupId);
+    const members = await getActiveGroupMembers(ctx, args.groupId);
     const memberIds = new Set(members.map((m) => m.userId));
 
     if (!memberIds.has(args.paidByUserId)) {
@@ -907,10 +990,47 @@ export const recordSettlement = mutation({
       throw new Error("Payer and recipient must be different people");
     }
 
-    const members = await getGroupMembers(ctx, args.groupId);
+    const members = await getActiveGroupMembers(ctx, args.groupId);
     const memberIds = new Set(members.map((m) => m.userId));
     if (!memberIds.has(args.fromUserId) || !memberIds.has(args.toUserId)) {
       throw new Error("Both people must be group members");
+    }
+
+    const rawExpenses = await ctx.db
+      .query("groupExpenses")
+      .withIndex("by_group", (q) => q.eq("groupId", args.groupId))
+      .collect();
+    const allSplits = (
+      await Promise.all(
+        rawExpenses.map((e) =>
+          ctx.db
+            .query("groupExpenseSplits")
+            .withIndex("by_expense", (q) => q.eq("expenseId", e._id))
+            .collect(),
+        ),
+      )
+    ).flat();
+    const rawSettlements = await getGroupSettlements(ctx, args.groupId);
+    const otherIds = Array.from(memberIds).filter(
+      (id) => id !== args.fromUserId,
+    ) as Id<"users">[];
+    const pairwise = computePairwiseDebtsWithUser(
+      args.fromUserId,
+      rawExpenses,
+      allSplits,
+      otherIds,
+      rawSettlements,
+    );
+    // from owes to when amount is negative for (from,to) in pairwise (from's view: positive = other owes me)
+    const pair = pairwise.find((p) => p.otherUserId === args.toUserId);
+    const owedByFrom = pair ? (pair.amount < 0 ? -pair.amount : 0) : 0;
+    const amount = Math.round(args.amount * 100) / 100;
+    if (amount > owedByFrom + 0.009) {
+      throw new Error(
+        owedByFrom <= 0
+          ? "Nothing is owed in that direction"
+          : `Settlement cannot exceed outstanding debt (${owedByFrom.toFixed(2)})`,
+      );
     }
 
     const note = args.note?.trim();
@@ -918,7 +1038,7 @@ export const recordSettlement = mutation({
       groupId: args.groupId,
       fromUserId: args.fromUserId,
       toUserId: args.toUserId,
-      amount: Math.round(args.amount * 100) / 100,
+      amount,
       date: args.date,
       ...(note ? { note } : {}),
       createdBy: userId,

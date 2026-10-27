@@ -1,58 +1,23 @@
 "use client";
 
-import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useConvex } from "convex/react";
-import { useAuthActions } from "@convex-dev/auth/react";
+import { useClerk } from "@clerk/nextjs";
+import { useQuery } from "convex/react";
 import { LogOut, Settings } from "lucide-react";
 import { api } from "@/convex/_generated/api";
 import { UserAvatar } from "@/components/user-avatar";
 import { getUserDisplayName } from "@/lib/user-display";
 import { cn } from "@/lib/utils";
 
-type UserProfile = {
-  _id: string;
-  name: string | null;
-  username: string | null;
-  email: string | null;
-  phone: string | null;
-  imageUrl: string | null;
-};
-
-function useCurrentUser() {
-  const convex = useConvex();
-  const [user, setUser] = useState<UserProfile | null | undefined>(undefined);
-
-  useEffect(() => {
-    let cancelled = false;
-    setUser(undefined);
-
-    convex
-      .query(api.users.me)
-      .then((result) => {
-        if (!cancelled) setUser(result);
-      })
-      .catch(() => {
-        if (!cancelled) setUser(null);
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [convex]);
-
-  return user;
-}
-
 export function UserMenu({ compact = false }: { compact?: boolean }) {
-  const user = useCurrentUser();
+  const user = useQuery(api.users.me);
   const pathname = usePathname();
   const router = useRouter();
-  const { signOut } = useAuthActions();
+  const { signOut } = useClerk();
 
   const handleSignOut = async () => {
-    await signOut();
+    await signOut({ redirectUrl: "/sign-in" });
     router.replace("/sign-in");
   };
 
@@ -75,7 +40,7 @@ export function UserMenu({ compact = false }: { compact?: boolean }) {
       <Link
         href="/settings"
         className={cn(
-          "flex h-9 w-9 items-center justify-center rounded-full transition-colors",
+          "inline-flex min-h-11 min-w-11 items-center justify-center rounded-full transition-colors",
           settingsActive
             ? "bg-primary/12 text-primary"
             : "text-muted-foreground hover:bg-muted/60 hover:text-foreground",
@@ -97,10 +62,10 @@ export function UserMenu({ compact = false }: { compact?: boolean }) {
       <Link
         href="/settings"
         className={cn(
-          "flex items-center gap-3 rounded-xl px-3 py-2.5 transition-colors",
+          "flex min-h-11 items-center gap-3 rounded-[12px] px-3 py-2.5 transition-colors",
           settingsActive
-            ? "bg-primary/10 text-primary"
-            : "hover:bg-muted/60",
+            ? "bg-primary/12 text-primary"
+            : "hover:bg-muted/70",
         )}
       >
         <UserAvatar
@@ -109,21 +74,22 @@ export function UserMenu({ compact = false }: { compact?: boolean }) {
           imageUrl={user?.imageUrl}
         />
         <div className="min-w-0 flex-1">
-          <p className="truncate text-sm font-medium text-foreground">
+          <p className="truncate text-[15px] font-medium tracking-tight text-foreground">
             {user ? displayName : "Account"}
           </p>
           {user?.username && (
-            <p className="truncate text-xs text-muted-foreground">@{user.username}</p>
+            <p className="truncate text-[12px] text-muted-foreground">@{user.username}</p>
           )}
         </div>
-        <Settings size={16} className="shrink-0 opacity-50" />
+        <Settings size={16} strokeWidth={1.75} className="shrink-0 opacity-40" />
       </Link>
 
       <button
+        type="button"
         onClick={handleSignOut}
-        className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2.5 text-sm font-medium text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground"
+        className="flex min-h-11 w-full items-center gap-2.5 rounded-[12px] px-3 py-2.5 text-[15px] font-medium text-muted-foreground transition-colors hover:bg-muted/70 hover:text-foreground"
       >
-        <LogOut size={16} />
+        <LogOut size={16} aria-hidden />
         Sign out
       </button>
     </div>

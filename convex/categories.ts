@@ -106,6 +106,26 @@ export const remove = mutation({
       await ctx.db.delete(b._id);
     }
 
+    const subs = await ctx.db
+      .query("subscriptions")
+      .withIndex("by_user", (q) => q.eq("userId", userId))
+      .collect();
+    for (const s of subs) {
+      if (s.categoryId === args.id) {
+        await ctx.db.patch(s._id, { categoryId: undefined });
+      }
+    }
+
+    const emis = await ctx.db
+      .query("emis")
+      .withIndex("by_user", (q) => q.eq("userId", userId))
+      .collect();
+    for (const e of emis) {
+      if (e.categoryId === args.id) {
+        await ctx.db.patch(e._id, { categoryId: undefined });
+      }
+    }
+
     await ctx.db.delete(args.id);
   },
 });

@@ -8,6 +8,7 @@ import {
   creditUtilizationPct,
   creditUtilized,
 } from "./lib/credit";
+import { bankLedgerBalance, type LedgerTx } from "./lib/accountBalances";
 import { decryptAccounts } from "./lib/sensitiveFields";
 
 function portfolioValue(investedAmount: number, currentValue?: number | null): number {
@@ -41,10 +42,11 @@ function sumInMonth(
   let expense = 0;
   let count = 0;
   for (const tx of txs) {
+    if (tx.type === "transfer") continue;
     if (tx.date.slice(0, 7) !== month) continue;
     count++;
     if (tx.type === "income") income += tx.amount;
-    else expense += tx.amount;
+    else if (tx.type === "expense") expense += tx.amount;
   }
   return { income, expense, count };
 }
@@ -57,11 +59,12 @@ function investmentTotals(
   let invested = 0; // outflows to investments
   let returns = 0; // inflows from investments
   for (const tx of txs) {
+    if (tx.type === "transfer") continue;
     if (month && tx.date.slice(0, 7) !== month) continue;
     const cat = tx.categoryId ? categories.get(tx.categoryId) : undefined;
     if (cat?.kind !== "investment") continue;
     if (tx.type === "expense") invested += tx.amount;
-    else returns += tx.amount;
+    else if (tx.type === "income") returns += tx.amount;
   }
   return { invested, returns, net: returns - invested };
 }
@@ -119,12 +122,13 @@ export const overview = query({
     const incomeByCat = new Map<string, number>();
 
     for (const tx of inRange) {
+      if (tx.type === "transfer") continue;
       if (tx.type === "income") {
         totalIncome += tx.amount;
         if (tx.categoryId) {
           incomeByCat.set(tx.categoryId, (incomeByCat.get(tx.categoryId) ?? 0) + tx.amount);
         }
-      } else {
+      } else if (tx.type === "expense") {
         totalExpenses += tx.amount;
         if (tx.categoryId) {
           expenseByCat.set(tx.categoryId, (expenseByCat.get(tx.categoryId) ?? 0) + tx.amount);
@@ -156,11 +160,12 @@ export const overview = query({
     }
     const bucketIndex = new Map(buckets.map((b, i) => [b.key, i]));
     for (const tx of all) {
+      if (tx.type === "transfer") continue;
       const key = tx.date.slice(0, 7);
       const idx = bucketIndex.get(key);
       if (idx === undefined) continue;
       if (tx.type === "income") buckets[idx].income += tx.amount;
-      else buckets[idx].expense += tx.amount;
+      else if (tx.type === "expense") buckets[idx].expense += tx.amount;
     }
 
     const savingsRate = totalIncome > 0 ? (totalIncome - totalExpenses) / totalIncome : 0;
@@ -268,15 +273,16 @@ export const insights = query({
       },
     };
 
-    // Per-account in/out for the selected month.
+    // Per-account in/out for the selected month (transfers excluded from income/expense).
     const accountFlows = accounts.map((acc) => {
       let income = 0;
       let expense = 0;
       for (const tx of all) {
+        if (tx.type === "transfer") continue;
         if (tx.accountId !== acc._id) continue;
         if (tx.date.slice(0, 7) !== currentMonth) continue;
         if (tx.type === "income") income += tx.amount;
-        else expense += tx.amount;
+        else if (tx.type === "expense") expense += tx.amount;
       }
       return {
         id: acc._id,
@@ -311,6 +317,20 @@ export const insights = query({
     ).filter((e) => e.isActive);
     const emiMonthly = activeEmis.reduce((sum, e) => sum + e.amount, 0);
 
+    const ledgerTxs = all as LedgerTx[];
+    const linkedByBank = new Map<string, string[]>();
+    for (const acc of accounts) {
+      if (
+        (acc.type === "debit" || acc.type === "wallet") &&
+        acc.linkedBankAccountId
+      ) {
+        const key = acc.linkedBankAccountId as string;
+        const list = linkedByBank.get(key) ?? [];
+        list.push(acc._id);
+        linkedByBank.set(key, list);
+      }
+    }
+
     const creditAccounts = accounts.filter((a) => a.type === "credit" && a.isActive !== false);
     let creditLimitTotal = 0;
     let creditUtilizedTotal = 0;
@@ -318,9 +338,14 @@ export const insights = query({
       let expense = 0;
       let income = 0;
       for (const tx of all) {
+        if (tx.type === "transfer") {
+          if (tx.transferToAccountId === acc._id) income += tx.amount;
+          else if (tx.accountId === acc._id) expense += tx.amount;
+          continue;
+        }
         if (tx.accountId !== acc._id) continue;
         if (tx.type === "expense") expense += tx.amount;
-        else income += tx.amount;
+        else if (tx.type === "income") income += tx.amount;
       }
       const utilized = creditUtilized(acc.initialUtilized, expense, income);
       creditUtilizedTotal += utilized;
@@ -343,8 +368,15 @@ export const insights = query({
     let totalBankBalance = 0;
     let banksWithBalance = 0;
     const banks = bankAccounts.map((acc) => {
-      if (acc.currentBalance != null) {
-        totalBankBalance += acc.currentBalance;
+      const ledger = bankLedgerBalance(
+        acc.currentBalance,
+        ledgerTxs,
+        acc._id,
+        linkedByBank.get(acc._id) ?? [],
+      );
+      const tracked = acc.currentBalance != null || ledger !== 0;
+      if (tracked) {
+        totalBankBalance += ledger;
         banksWithBalance++;
       }
       return {
@@ -352,7 +384,9 @@ export const insights = query({
         name: acc.name,
         institution: acc.institution ?? null,
         color: acc.color,
-        currentBalance: acc.currentBalance ?? null,
+        currentBalance: tracked ? ledger : null,
+        openingBalance: acc.currentBalance ?? null,
+        ledgerBalance: tracked ? ledger : null,
       };
     });
 

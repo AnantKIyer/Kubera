@@ -48,3 +48,7 @@ public/fallback-*.js
 # Linear helper output
 .linear-views.json
 
+# Agent skills (installed locally; not part of the app)
+.agents/skills/
+skills-lock.json
+

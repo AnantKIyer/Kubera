@@ -54,9 +54,9 @@ export function MobileMoreSheet({ open, onClose }: MobileMoreSheetProps) {
             type="button"
             onClick={onClose}
             aria-label="Close"
-            className="rounded-xl p-2 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+            className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-xl text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
           >
-            <X size={18} />
+            <X size={18} aria-hidden />
           </button>
         </div>
         <nav className="grid gap-1 px-3 py-3">
