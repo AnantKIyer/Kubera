@@ -1,11 +1,15 @@
 "use client";
 
-import { useState } from "react";
+import Link from "next/link";
+import { useState, type ReactNode } from "react";
 import { useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
-import { ChevronLeft, ChevronRight, TrendingUp, PieChart } from "lucide-react";
+import { PieChart, Plus, TrendingUp, Wallet } from "lucide-react";
 import { PageHeader } from "@/components/page-header";
+import { MoneyValue } from "@/components/money-value";
+import { buttonClassName } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { MonthPicker } from "@/components/ui/month-picker";
 import { Skeleton, EmptyState } from "@/components/ui/misc";
 import { TrendChart } from "@/components/charts/trend-chart";
 import { CategoryDonut } from "@/components/charts/category-donut";
@@ -16,13 +20,13 @@ import {
   formatMonth,
   formatPercent,
   monthRange,
-  shiftMonth,
 } from "@/lib/format";
 import {
   MonthComparisonPanel,
   InvestmentPortfolioCard,
   AccountFlowsCard,
 } from "@/components/insights-panels";
+import { cn } from "@/lib/utils";
 
 export default function AnalyticsPage() {
   const [month, setMonth] = useState(currentMonth());
@@ -31,6 +35,8 @@ export default function AnalyticsPage() {
   const insights = useQuery(api.stats.insights, { month });
 
   const isCurrent = month >= currentMonth();
+  const quietMonth =
+    !!stats && stats.totalIncome === 0 && stats.totalExpenses === 0;
 
   return (
     <>
@@ -38,24 +44,11 @@ export default function AnalyticsPage() {
         title="Analytics"
         description="Understand where your money goes over time."
         action={
-          <div className="flex items-center gap-1 rounded-lg border border-border bg-card p-1">
-            <button
-              onClick={() => setMonth(shiftMonth(month, -1))}
-              className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-            >
-              <ChevronLeft size={18} />
-            </button>
-            <span className="min-w-[120px] text-center text-sm font-semibold">
-              {formatMonth(month)}
-            </span>
-            <button
-              onClick={() => !isCurrent && setMonth(shiftMonth(month, 1))}
-              disabled={isCurrent}
-              className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:opacity-30"
-            >
-              <ChevronRight size={18} />
-            </button>
-          </div>
+          <MonthPicker
+            month={month}
+            onChange={setMonth}
+            disableNext={isCurrent}
+          />
         }
       />
 
@@ -65,34 +58,84 @@ export default function AnalyticsPage() {
           Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-20" />)
         ) : (
           <>
-            <MiniStat label="Income" value={formatCurrency(stats.totalIncome)} className="text-[hsl(var(--income))]" />
-            <MiniStat label="Expenses" value={formatCurrency(stats.totalExpenses)} className="text-[hsl(var(--expense))]" />
-            <MiniStat label="Net saved" value={formatCurrency(stats.balance)} />
+            <MiniStat
+              label="Income"
+              value={<MoneyValue amount={stats.totalIncome} variant="income" />}
+            />
+            <MiniStat
+              label="Expenses"
+              value={<MoneyValue amount={stats.totalExpenses} variant="expense" />}
+            />
+            <MiniStat
+              label="Net saved"
+              value={
+                <MoneyValue
+                  amount={stats.balance}
+                  variant={stats.balance === 0 ? "plain" : "delta"}
+                />
+              }
+            />
             <MiniStat label="Savings rate" value={formatPercent(stats.savingsRate)} />
           </>
         )}
       </div>
 
-      {insights && <MonthComparisonPanel insights={insights} />}
+      {quietMonth && (
+        <div className="mt-4 flex flex-col gap-3 rounded-2xl border border-border/70 bg-card px-5 py-5 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <p className="text-[15px] font-semibold tracking-tight">
+              No activity in {formatMonth(month)} yet
+            </p>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Add an income or expense to unlock trends, projections, and category breakdowns.
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <Link href="/transactions" className={buttonClassName({ variant: "outline" })}>
+              <Wallet size={16} aria-hidden /> View transactions
+            </Link>
+            <Link href="/transactions" className={buttonClassName()}>
+              <Plus size={16} aria-hidden /> Add transaction
+            </Link>
+          </div>
+        </div>
+      )}
 
-      <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-2">
-        {insights && (
+      {insights && !quietMonth && <div className="mt-4"><MonthComparisonPanel insights={insights} /></div>}
+
+      {insights && !quietMonth && (
+        <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-2">
           <InvestmentPortfolioCard
             investment={insights.investment}
             portfolio={insights.portfolio}
           />
-        )}
-        {insights && insights.accountFlows.some((a) => a.income > 0 || a.expense > 0) && (
-          <AccountFlowsCard flows={insights.accountFlows.filter((a) => a.income > 0 || a.expense > 0)} />
-        )}
-      </div>
+          {insights.accountFlows.some((a) => a.income > 0 || a.expense > 0) && (
+            <AccountFlowsCard
+              flows={insights.accountFlows.filter((a) => a.income > 0 || a.expense > 0)}
+            />
+          )}
+        </div>
+      )}
+
+      {quietMonth && insights && (
+        <div className="mt-4">
+          <InvestmentPortfolioCard
+            investment={insights.investment}
+            portfolio={insights.portfolio}
+          />
+        </div>
+      )}
 
       <Card className="mt-4">
         <CardHeader>
           <CardTitle>6-month cash flow</CardTitle>
         </CardHeader>
         <CardContent>
-          {!stats ? <Skeleton className="h-[260px]" /> : <TrendChart data={stats.monthlyTrend} />}
+          {!stats ? (
+            <Skeleton className="h-[260px]" />
+          ) : (
+            <TrendChart data={stats.monthlyTrend} />
+          )}
         </CardContent>
       </Card>
 
@@ -105,7 +148,16 @@ export default function AnalyticsPage() {
             {!stats ? (
               <Skeleton className="h-[200px]" />
             ) : stats.expensesByCategory.length === 0 ? (
-              <EmptyState icon={<PieChart size={22} />} title="No expenses this month" />
+              <EmptyState
+                icon={<PieChart size={22} />}
+                title="No expenses this month"
+                description="Log a spend to see where money goes."
+                action={
+                  <Link href="/transactions" className={buttonClassName()}>
+                    <Plus size={16} aria-hidden /> Add expense
+                  </Link>
+                }
+              />
             ) : (
               <CategoryDonut
                 data={stats.expensesByCategory}
@@ -125,7 +177,19 @@ export default function AnalyticsPage() {
             {!stats ? (
               <Skeleton className="h-[200px]" />
             ) : stats.incomeByCategory.length === 0 ? (
-              <EmptyState icon={<TrendingUp size={22} />} title="No income this month" />
+              <EmptyState
+                icon={<TrendingUp size={22} />}
+                title="No income this month"
+                description="Add salary, freelance, or other income to track inflows."
+                action={
+                  <Link
+                    href="/transactions"
+                    className={buttonClassName({ variant: "outline" })}
+                  >
+                    <Plus size={16} aria-hidden /> Add income
+                  </Link>
+                }
+              />
             ) : (
               <CategoryDonut
                 data={stats.incomeByCategory}
@@ -138,7 +202,6 @@ export default function AnalyticsPage() {
         </Card>
       </div>
 
-      {/* Top spending list */}
       {stats && stats.expensesByCategory.length > 0 && (
         <Card className="mt-4">
           <CardHeader>
@@ -154,6 +217,7 @@ export default function AnalyticsPage() {
                     <div
                       className="flex h-7 w-7 items-center justify-center rounded-lg"
                       style={{ backgroundColor: `${c.color}24`, color: c.color }}
+                      aria-hidden
                     >
                       <Icon size={14} />
                     </div>
@@ -165,7 +229,10 @@ export default function AnalyticsPage() {
                   <div className="h-1.5 overflow-hidden rounded-full bg-muted">
                     <div
                       className="h-full rounded-full"
-                      style={{ width: `${Math.max(pct * 100, 2)}%`, backgroundColor: c.color }}
+                      style={{
+                        width: `${Math.max(pct * 100, 2)}%`,
+                        backgroundColor: c.color,
+                      }}
                     />
                   </div>
                 </div>
@@ -181,16 +248,14 @@ export default function AnalyticsPage() {
 function MiniStat({
   label,
   value,
-  className,
 }: {
   label: string;
-  value: string;
-  className?: string;
+  value: ReactNode;
 }) {
   return (
     <Card className="p-4">
-      <p className="text-xs text-muted-foreground">{label}</p>
-      <p className={`mt-1 text-xl font-bold tabular-nums ${className ?? ""}`}>{value}</p>
+      <p className="text-xs font-medium text-muted-foreground">{label}</p>
+      <p className={cn("mt-1 text-xl font-bold tracking-tight")}>{value}</p>
     </Card>
   );
 }

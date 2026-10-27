@@ -148,18 +148,18 @@ export function DatePicker({
                   type="button"
                   aria-label="Previous month"
                   onClick={() => shiftMonth(-1)}
-                  className="rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                  className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
                 >
-                  <ChevronLeft size={18} />
+                  <ChevronLeft size={18} aria-hidden />
                 </button>
                 <p className="text-sm font-semibold tracking-tight">{monthLabel}</p>
                 <button
                   type="button"
                   aria-label="Next month"
                   onClick={() => shiftMonth(1)}
-                  className="rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                  className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
                 >
-                  <ChevronRight size={18} />
+                  <ChevronRight size={18} aria-hidden />
                 </button>
               </div>
             </div>
@@ -169,7 +169,7 @@ export function DatePicker({
                 {WEEKDAYS.map((day) => (
                   <div
                     key={day}
-                    className="py-1 text-center text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/70"
+                    className="py-1 text-center text-caption font-medium text-muted-foreground/70"
                   >
                     {day}
                   </div>

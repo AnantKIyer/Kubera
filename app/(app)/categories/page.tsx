@@ -228,7 +228,16 @@ function CategoryColumn({
       </CardHeader>
       <CardContent>
         {items.length === 0 ? (
-          <EmptyState icon={<Tags size={20} />} title="No categories yet" />
+          <EmptyState
+            icon={<Tags size={22} />}
+            title={`No ${title.toLowerCase()} yet`}
+            description="Add categories to organize transactions."
+            action={
+              <Button onClick={onAdd}>
+                <Plus size={16} aria-hidden /> Add category
+              </Button>
+            }
+          />
         ) : (
           <div className="space-y-1">
             {items.map((c) => {
@@ -248,13 +257,13 @@ function CategoryColumn({
                   <div className="flex items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100">
                     <button
                       onClick={() => onEdit(c)}
-                      className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                      className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-xl text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
                     >
                       <Pencil size={14} />
                     </button>
                     <button
                       onClick={() => onRemove(c._id)}
-                      className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-[hsl(var(--expense))]/10 hover:text-[hsl(var(--expense))]"
+                      className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-xl text-muted-foreground transition-colors hover:bg-[hsl(var(--expense))]/10 hover:text-[hsl(var(--expense))]"
                     >
                       <Trash2 size={14} />
                     </button>

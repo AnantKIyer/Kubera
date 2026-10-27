@@ -92,7 +92,7 @@ function DonutRing({
         </PieChart>
       </ResponsiveContainer>
       <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center px-4 text-center">
-        <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+        <span className="text-caption font-medium text-muted-foreground">
           {centerLabel}
         </span>
         <span

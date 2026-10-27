@@ -1,4 +1,5 @@
 import { toISODate } from "@/lib/format";
+import { addCalendarMonths } from "@/lib/subscription-dates";
 
 function parseISODate(iso: string): Date {
   const [y, m, d] = iso.split("-").map(Number);
@@ -6,8 +7,7 @@ function parseISODate(iso: string): Date {
 }
 
 export function addMonthsToIso(iso: string, months: number): string {
-  const [y, m, d] = iso.split("-").map(Number);
-  return toISODate(new Date(y, m - 1 + months, d));
+  return addCalendarMonths(iso, months);
 }
 
 /** If loan started 30+ days ago, infer paid installments and next due date. */
@@ -148,6 +148,7 @@ export type EmiPaymentAnalysis = {
   expectedEmi: number;
   installmentsCovered: number;
   extraAmount: number;
+  shortfall: number;
   isExtra: boolean;
   isUnderpaid: boolean;
 };
@@ -160,26 +161,30 @@ export function analyzeEmiPayment(
   if (!(expectedEmi > 0)) {
     return {
       expectedEmi: paidAmount,
-      installmentsCovered: 1,
+      installmentsCovered: paidAmount > 0 ? 1 : 0,
       extraAmount: 0,
+      shortfall: 0,
       isExtra: false,
       isUnderpaid: false,
     };
   }
 
-  const fullBlocks = Math.floor(paidAmount / expectedEmi);
-  const installmentsCovered = fullBlocks > 0 ? fullBlocks : paidAmount > 0 ? 1 : 0;
-  const extraAmount =
-    fullBlocks > 0
-      ? Math.round((paidAmount - fullBlocks * expectedEmi) * 100) / 100
-      : Math.max(0, Math.round((paidAmount - expectedEmi) * 100) / 100);
+  const fullBlocks = Math.floor(paidAmount / expectedEmi + 1e-9);
+  const installmentsCovered = fullBlocks;
+  const remainder = Math.round((paidAmount - fullBlocks * expectedEmi) * 100) / 100;
+  const isUnderpaid = paidAmount > 0 && paidAmount < expectedEmi;
+  const extraAmount = fullBlocks > 0 ? Math.max(0, remainder) : 0;
+  const shortfall = isUnderpaid
+    ? Math.round((expectedEmi - paidAmount) * 100) / 100
+    : 0;
 
   return {
     expectedEmi,
     installmentsCovered,
     extraAmount,
+    shortfall,
     isExtra: extraAmount > 0,
-    isUnderpaid: paidAmount > 0 && paidAmount < expectedEmi,
+    isUnderpaid,
   };
 }
 

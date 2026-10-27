@@ -43,7 +43,7 @@ export function Modal({
   return createPortal(
     <div className="fixed inset-0 z-50 flex items-end justify-center p-0 sm:items-center sm:p-5">
       <div
-        className="absolute inset-0 bg-background/80 animate-fade-in"
+        className="absolute inset-0 bg-foreground/20 backdrop-blur-sm animate-fade-in dark:bg-black/50"
         onClick={onClose}
         aria-hidden
       />
@@ -53,14 +53,14 @@ export function Modal({
         aria-labelledby="modal-title"
         className={cn(
           "relative z-10 flex w-full flex-col animate-scale-in overflow-hidden",
-          "rounded-t-[1.25rem] border border-border/50 bg-card shadow-soft sm:rounded-2xl",
+          "rounded-t-[1.35rem] bg-card shadow-sheet sm:rounded-[1.25rem] sm:shadow-soft",
           "max-h-[min(92vh,720px)]",
           size === "lg" ? "max-w-xl" : "max-w-md",
           className,
         )}
       >
         {/* Header */}
-        <div className="flex shrink-0 items-start justify-between gap-4 border-b border-border/60 px-5 py-4">
+        <div className="flex shrink-0 items-start justify-between gap-4 border-b border-border/50 px-5 py-4">
           <div className="min-w-0 pr-2">
             <h2 id="modal-title" className="text-base font-semibold tracking-tight">
               {title}

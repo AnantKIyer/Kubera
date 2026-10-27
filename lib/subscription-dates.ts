@@ -14,25 +14,35 @@ export const BILLING_CYCLE_OPTIONS: { value: BillingCycle; label: string }[] = [
   { value: "yearly", label: BILLING_CYCLE_LABELS.yearly },
 ];
 
-/** Add one billing period to an ISO date (YYYY-MM-DD). */
-export function addBillingPeriod(isoDate: string, cycle: BillingCycle): string {
+function daysInMonth(year: number, month: number): number {
+  return new Date(year, month, 0).getDate();
+}
+
+/** Add calendar months without overflowing end-of-month dates. */
+export function addCalendarMonths(isoDate: string, months: number): string {
   const [y, m, d] = isoDate.split("-").map(Number);
-  const date = new Date(y, m - 1, d);
+  if (!y || !m || !d) throw new Error("Invalid date");
+  const total = y * 12 + (m - 1) + months;
+  const ty = Math.floor(total / 12);
+  const tm = ((total % 12) + 12) % 12;
+  const day = Math.min(d, daysInMonth(ty, tm + 1));
+  return `${ty}-${String(tm + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+}
+
+function monthsForCycle(cycle: BillingCycle): number {
   switch (cycle) {
     case "monthly":
-      date.setMonth(date.getMonth() + 1);
-      break;
+      return 1;
     case "quarterly":
-      date.setMonth(date.getMonth() + 3);
-      break;
+      return 3;
     case "half-yearly":
-      date.setMonth(date.getMonth() + 6);
-      break;
+      return 6;
     case "yearly":
-      date.setFullYear(date.getFullYear() + 1);
-      break;
+      return 12;
   }
-  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(
-    date.getDate(),
-  ).padStart(2, "0")}`;
+}
+
+/** Add one billing period to an ISO date (YYYY-MM-DD). */
+export function addBillingPeriod(isoDate: string, cycle: BillingCycle): string {
+  return addCalendarMonths(isoDate, monthsForCycle(cycle));
 }

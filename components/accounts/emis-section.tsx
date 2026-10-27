@@ -264,12 +264,12 @@ export const EmisSection = forwardRef<EmisSectionHandle>(function EmisSection(_p
                       <div className="flex items-center gap-2 flex-wrap">
                         <p className="font-medium">{e.name}</p>
                         {!e.isActive && (
-                          <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] font-medium uppercase">
+                          <span className="rounded bg-muted px-1.5 py-0.5 text-caption font-medium">
                             Closed
                           </span>
                         )}
                         {(e.extraPaidTotal ?? 0) > 0 && (
-                          <span className="rounded bg-[hsl(var(--income))]/12 px-1.5 py-0.5 text-[10px] font-medium text-[hsl(var(--income))]">
+                          <span className="rounded bg-[hsl(var(--income))]/12 px-1.5 py-0.5 text-caption font-medium text-[hsl(var(--income))]">
                             +{formatCurrency(e.extraPaidTotal ?? 0)} extra
                           </span>
                         )}
@@ -283,7 +283,7 @@ export const EmisSection = forwardRef<EmisSectionHandle>(function EmisSection(_p
                       </p>
                       {e.principalAmount != null && (
                         <div className="mt-2">
-                          <div className="mb-1 flex justify-between text-[10px] text-muted-foreground">
+                          <div className="mb-1 flex justify-between text-caption text-muted-foreground">
                             <span>
                               Paid {formatCurrency(e.totalPaid)} of{" "}
                               {formatCurrency(e.principalAmount)}
@@ -316,7 +316,7 @@ export const EmisSection = forwardRef<EmisSectionHandle>(function EmisSection(_p
                       </button>
                       <button
                         onClick={() => openEdit(e as EditingEmi)}
-                        className="rounded-md p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground"
+                        className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-xl text-muted-foreground hover:bg-muted hover:text-foreground"
                       >
                         <Pencil size={14} />
                       </button>
@@ -324,7 +324,7 @@ export const EmisSection = forwardRef<EmisSectionHandle>(function EmisSection(_p
                         onClick={() => {
                           if (confirm("Delete this loan?")) remove({ id: e._id });
                         }}
-                        className="rounded-md p-1.5 text-muted-foreground hover:bg-[hsl(var(--expense))]/10 hover:text-[hsl(var(--expense))]"
+                        className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-xl text-muted-foreground hover:bg-[hsl(var(--expense))]/10 hover:text-[hsl(var(--expense))]"
                       >
                         <Trash2 size={14} />
                       </button>

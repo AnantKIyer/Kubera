@@ -7,6 +7,7 @@ import { api } from "@/convex/_generated/api";
 import {
   ArrowDownLeft,
   ArrowUpRight,
+  ChevronDown,
   PiggyBank,
   Plus,
   Wallet,
@@ -45,6 +46,7 @@ import {
   InvestmentFormModal,
   type EditingInvestment,
 } from "@/components/investments/investment-form-modal";
+import { cn } from "@/lib/utils";
 
 export default function DashboardPage() {
   const month = currentMonth();
@@ -59,6 +61,7 @@ export default function DashboardPage() {
   const [editing, setEditing] = useState<EditableTransaction | null>(null);
   const [investmentModalOpen, setInvestmentModalOpen] = useState(false);
   const [editingInvestment, setEditingInvestment] = useState<EditingInvestment | null>(null);
+  const [insightsOpen, setInsightsOpen] = useState(false);
 
   const openInvestmentModal = () => {
     setEditingInvestment(null);
@@ -84,16 +87,16 @@ export default function DashboardPage() {
         action={
           <>
             <Button variant="outline" size="md" onClick={() => openNew("income")}>
-              <ArrowDownLeft size={16} /> Income
+              <ArrowDownLeft size={16} aria-hidden /> Income
             </Button>
             <Button size="md" onClick={() => openNew("expense")}>
-              <Plus size={16} /> Add expense
+              <Plus size={16} aria-hidden /> Add expense
             </Button>
           </>
         }
       />
 
-      {/* KPI cards */}
+      {/* Primary KPIs — one glance */}
       <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
         {!stats || !insights ? (
           Array.from({ length: 4 }).map((_, i) => (
@@ -118,6 +121,7 @@ export default function DashboardPage() {
               value={formatCurrency(stats.totalIncome)}
               icon={ArrowUpRight}
               tone="income"
+              signed
               hint={`${stats.transactionCount} transactions`}
             />
             <StatCard
@@ -125,6 +129,7 @@ export default function DashboardPage() {
               value={formatCurrency(stats.totalExpenses)}
               icon={ArrowDownLeft}
               tone="expense"
+              signed
               hint="Spent this month"
             />
             <StatCard
@@ -132,49 +137,25 @@ export default function DashboardPage() {
               value={formatPercent(stats.savingsRate)}
               icon={PiggyBank}
               tone="neutral"
-              hint={stats.savingsRate >= 0.2 ? "On track 🎯" : "Room to improve"}
+              hint={stats.savingsRate >= 0.2 ? "On track" : "Room to improve"}
             />
           </>
         )}
       </div>
 
-      {/* Month-over-month & projections */}
-      {insights ? (
-        <div className="mt-4 space-y-4">
-          <MonthComparisonPanel insights={insights} />
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            <InvestmentPortfolioCard
-              investment={insights.investment}
-              portfolio={insights.portfolio}
-              onAdd={openInvestmentModal}
-            />
-            <SubscriptionBurnCard subscriptions={insights.subscriptions} />
-            <EmiBurnCard emis={insights.emis} />
-            <CreditUtilizationCard creditCards={insights.creditCards} />
-            <BankBalancesCard balances={insights.accountBalances} />
-            {insights.accountFlows.some((a) => a.income > 0 || a.expense > 0) && (
-              <AccountFlowsCard flows={insights.accountFlows.filter((a) => a.income > 0 || a.expense > 0)} />
-            )}
-          </div>
-        </div>
-      ) : (
-        <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-2">
-          <Skeleton className="h-64" />
-          <Skeleton className="h-64" />
-        </div>
-      )}
-
-      {/* Charts */}
+      {/* Charts — secondary focus */}
       <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-3">
         <Card className="lg:col-span-2">
           <CardHeader className="flex-row items-center justify-between">
             <CardTitle>Cash flow</CardTitle>
             <span className="flex items-center gap-3 text-xs text-muted-foreground">
               <span className="flex items-center gap-1.5">
-                <span className="h-2 w-2 rounded-full bg-[hsl(var(--income))]" /> Income
+                <span className="h-2 w-2 rounded-full bg-[hsl(var(--income))]" aria-hidden />
+                <span>Income (+)</span>
               </span>
               <span className="flex items-center gap-1.5">
-                <span className="h-2 w-2 rounded-full bg-[hsl(var(--expense))]" /> Expense
+                <span className="h-2 w-2 rounded-full bg-[hsl(var(--expense))]" aria-hidden />
+                <span>Expense (−)</span>
               </span>
             </span>
           </CardHeader>
@@ -211,15 +192,15 @@ export default function DashboardPage() {
         </Card>
       </div>
 
-      {/* Recent */}
+      {/* Recent activity */}
       <Card className="mt-4">
         <CardHeader className="flex-row items-center justify-between">
           <CardTitle>Recent activity</CardTitle>
           <Link
             href="/transactions"
-            className="inline-flex items-center gap-1 text-sm font-medium text-primary hover:underline"
+            className="inline-flex min-h-11 items-center gap-1 px-1 text-sm font-medium text-primary hover:underline"
           >
-            View all <ArrowRight size={14} />
+            View all <ArrowRight size={14} aria-hidden />
           </Link>
         </CardHeader>
         <CardContent>
@@ -241,6 +222,64 @@ export default function DashboardPage() {
           )}
         </CardContent>
       </Card>
+
+      {/* Deeper insights — progressive disclosure */}
+      <div className="mt-4">
+        <button
+          type="button"
+          onClick={() => setInsightsOpen((o) => !o)}
+          aria-expanded={insightsOpen}
+          className="flex min-h-11 w-full items-center justify-between rounded-xl border border-border/60 bg-card px-4 py-3 text-left transition-colors hover:bg-muted/40"
+        >
+          <div>
+            <p className="text-[15px] font-semibold tracking-tight">More insights</p>
+            <p className="mt-0.5 text-xs text-muted-foreground">
+              Month comparison, investments, subscriptions, EMIs, and account flows
+            </p>
+          </div>
+          <ChevronDown
+            size={20}
+            className={cn(
+              "shrink-0 text-muted-foreground transition-transform duration-200",
+              insightsOpen && "rotate-180",
+            )}
+            aria-hidden
+          />
+        </button>
+
+        {insightsOpen && (
+          <div className="mt-3 space-y-4 animate-fade-in">
+            {insights ? (
+              <>
+                <MonthComparisonPanel insights={insights} />
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                  <InvestmentPortfolioCard
+                    investment={insights.investment}
+                    portfolio={insights.portfolio}
+                    onAdd={openInvestmentModal}
+                  />
+                  <SubscriptionBurnCard subscriptions={insights.subscriptions} />
+                  <EmiBurnCard emis={insights.emis} />
+                  <CreditUtilizationCard creditCards={insights.creditCards} />
+                  <BankBalancesCard balances={insights.accountBalances} />
+                  {insights.accountFlows.some((a) => a.income > 0 || a.expense > 0) && (
+                    <AccountFlowsCard
+                      flows={insights.accountFlows.filter(
+                        (a) => a.income > 0 || a.expense > 0,
+                      )}
+                    />
+                  )}
+                </div>
+              </>
+            ) : (
+              <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+                <Skeleton className="h-64" />
+                <Skeleton className="h-64" />
+              </div>
+            )}
+          </div>
+        )}
+      </div>
 
       <TransactionForm
         open={formOpen}

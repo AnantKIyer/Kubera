@@ -91,7 +91,7 @@ export function CurrencyMoneyInput({
   return (
     <div className="rounded-2xl border border-border/40 bg-muted/15 p-5">
       <div className="flex items-center justify-between gap-3">
-        <p className="text-[11px] font-semibold uppercase tracking-[0.1em] text-muted-foreground">
+        <p className="text-caption font-medium text-muted-foreground">
           {label}
         </p>
         {!forceBaseCurrency && (

@@ -4,8 +4,8 @@ import { useEffect, useState } from "react";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { Mail, Phone, AtSign, User as UserIcon } from "lucide-react";
+import { useClerk } from "@clerk/nextjs";
 import { PageHeader } from "@/components/page-header";
-import { ChangePasswordForm } from "@/components/change-password-form";
 import { ProfileAvatarUpload } from "@/components/profile-avatar-upload";
 import { UserAvatar } from "@/components/user-avatar";
 import { Button } from "@/components/ui/button";
@@ -14,20 +14,38 @@ import { FormError, FormField, Input } from "@/components/ui/form";
 import { Skeleton } from "@/components/ui/misc";
 import { getUserDisplayName } from "@/lib/user-display";
 import { parseUserError } from "@/lib/errors";
+import { AppearanceControl } from "@/components/theme-toggle";
 import { AppIconCurrencyCard } from "@/components/pwa/app-icon-currency-card";
 import { InstallAppCard } from "@/components/pwa/install-app-card";
 
 export default function SettingsPage() {
   const user = useQuery(api.users.me);
   const updateProfile = useMutation(api.users.updateProfile);
+  const updateUsername = useMutation(api.users.updateUsername);
+  const { openUserProfile } = useClerk();
   const [name, setName] = useState("");
+  const [username, setUsername] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [usernameError, setUsernameError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
+  const [usernameSaved, setUsernameSaved] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [usernameLoading, setUsernameLoading] = useState(false);
+
+  const usernameAvailability = useQuery(
+    api.authHelpers.checkFieldAvailable,
+    username.trim().length >= 3
+      ? { field: "username" as const, value: username }
+      : "skip",
+  );
 
   useEffect(() => {
     if (user?.name) setName(user.name);
   }, [user?.name]);
+
+  useEffect(() => {
+    if (user?.username) setUsername(user.username);
+  }, [user?.username]);
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -44,6 +62,23 @@ export default function SettingsPage() {
     }
   };
 
+  const handleUsernameSave = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setUsernameError(null);
+    setUsernameSaved(false);
+    setUsernameLoading(true);
+    try {
+      await updateUsername({ username: username.trim() });
+      setUsernameSaved(true);
+    } catch (err) {
+      setUsernameError(
+        parseUserError(err, "We couldn't update your username. Please try again."),
+      );
+    } finally {
+      setUsernameLoading(false);
+    }
+  };
+
   if (user === undefined) {
     return (
       <div className="space-y-6">
@@ -56,6 +91,18 @@ export default function SettingsPage() {
   if (user === null) return null;
 
   const displayName = getUserDisplayName(user.name, user.username, user.email);
+  const usernameUnchanged =
+    username.trim().toLowerCase() === (user.username ?? "").toLowerCase();
+  const usernameHint =
+    !usernameUnchanged &&
+    username.trim().length >= 3 &&
+    usernameAvailability &&
+    "available" in usernameAvailability &&
+    !usernameAvailability.available
+      ? usernameAvailability.reason === "invalid"
+        ? "Use 3–24 letters, numbers, or underscores."
+        : "That username is taken."
+      : null;
 
   return (
     <div className="animate-fade-in">
@@ -67,7 +114,25 @@ export default function SettingsPage() {
       <div className="grid max-w-2xl gap-6">
         <InstallAppCard />
 
+        <Card>
+          <CardHeader>
+            <CardTitle>Appearance</CardTitle>
+            <CardDescription>
+              Defaults to your system setting. Override only if you prefer a fixed look.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <AppearanceControl />
+          </CardContent>
+        </Card>
+
         <AppIconCurrencyCard homeCurrency={user.homeCurrency} />
+
+        {!user.username && (
+          <div className="rounded-xl border border-primary/20 bg-primary/5 px-4 py-3 text-sm text-foreground">
+            Set a username below so others can find you in group invites.
+          </div>
+        )}
 
         <Card>
           <CardHeader>
@@ -134,9 +199,68 @@ export default function SettingsPage() {
 
         <Card>
           <CardHeader>
+            <CardTitle>Username</CardTitle>
+            <CardDescription>
+              Used inside Kubera for groups and display — not your Clerk sign-in.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <form onSubmit={handleUsernameSave} className="space-y-4">
+              <FormField label="Username">
+                <div className="relative">
+                  <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">
+                    @
+                  </span>
+                  <Input
+                    className="pl-7"
+                    value={username}
+                    onChange={(e) => {
+                      setUsername(e.target.value);
+                      setUsernameSaved(false);
+                    }}
+                    placeholder="your_name"
+                    autoComplete="username"
+                    minLength={3}
+                    maxLength={24}
+                    required
+                  />
+                </div>
+                {usernameHint && (
+                  <p className="mt-1.5 text-xs text-expense">{usernameHint}</p>
+                )}
+              </FormField>
+
+              {usernameError && (
+                <FormError
+                  title="Username not updated"
+                  message={usernameError}
+                  onDismiss={() => setUsernameError(null)}
+                />
+              )}
+              {usernameSaved && (
+                <p className="text-sm text-income">Username saved.</p>
+              )}
+
+              <Button
+                type="submit"
+                disabled={
+                  usernameLoading ||
+                  !username.trim() ||
+                  Boolean(usernameHint) ||
+                  usernameUnchanged
+                }
+              >
+                {usernameLoading ? "Saving…" : "Save username"}
+              </Button>
+            </form>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
             <CardTitle>Sign-in details</CardTitle>
             <CardDescription>
-              Used to sign in. Contact support to change username, email, or phone.
+              Managed by Clerk. Email and phone come from your Clerk account.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
@@ -154,30 +278,21 @@ export default function SettingsPage() {
 
         <Card>
           <CardHeader>
-            <CardTitle>Password</CardTitle>
+            <CardTitle>Security</CardTitle>
             <CardDescription>
-              Change your password while signed in
+              Password, email, and MFA are managed in your Clerk account
             </CardDescription>
           </CardHeader>
-          <CardContent>
-            <ChangePasswordForm />
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle>Forgot password?</CardTitle>
-            <CardDescription>
-              If you can&apos;t remember your current password
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
+          <CardContent className="space-y-3">
+            <Button type="button" variant="outline" onClick={() => openUserProfile()}>
+              Manage account &amp; password
+            </Button>
             <p className="text-sm text-muted-foreground">
-              Sign out and use{" "}
-              <a href="/forgot-password" className="font-medium text-primary hover:underline">
-                forgot password
+              Forgot your password? Use{" "}
+              <a href="/sign-in" className="font-medium text-primary hover:underline">
+                Sign in
               </a>{" "}
-              to reset via OTP on your registered phone number.
+              and choose Clerk&apos;s reset flow (email by default).
             </p>
           </CardContent>
         </Card>
@@ -196,15 +311,13 @@ function DetailRow({
   value: string;
 }) {
   return (
-    <div className="flex items-center gap-3 rounded-xl bg-muted/30 px-3.5 py-3">
-      <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-background text-muted-foreground">
-        <Icon size={16} />
+    <div className="flex items-center gap-3 rounded-[12px] bg-muted/45 px-3.5 py-3">
+      <div className="flex h-8 w-8 items-center justify-center rounded-[10px] bg-card text-muted-foreground">
+        <Icon size={16} strokeWidth={1.75} />
       </div>
       <div className="min-w-0">
-        <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
-          {label}
-        </p>
-        <p className="truncate text-sm font-medium">{value}</p>
+        <p className="text-[12px] font-medium text-muted-foreground">{label}</p>
+        <p className="truncate text-[15px] font-medium tracking-tight">{value}</p>
       </div>
     </div>
   );

@@ -1,0 +1,45 @@
+---
+description: >-
+  Apple HIG design review process. Use when reviewing or improving UI/UX,
+  auditing accessibility, layouts, or visual craft; adapting for iPhone Duo;
+  implementing Liquid Glass or glassmorphism; making a design less generic;
+  reviewing app icons, widgets, or Live Activities; auditing UI codebases;
+  checking Apple Pay checkouts; or evaluating any visual or interaction design.
+alwaysApply: false
+---
+
+# Apple HIG design review
+
+When reviewing or improving UI/UX, follow this Apple Human Interface Guidelines–based process.
+
+## Process
+
+1. **Read the Apple HIG skill `SKILL.md` in full** (project or agent skills, e.g. `**/apple-hig/**/SKILL.md` or `**/hig/**/SKILL.md`). It defines Apple's eight design principles, the five audit lenses (accessibility, platform conventions, visual design and craft, interaction, writing), the report format, and the design improvement process. If the skill is missing, say so and fall back to [Apple HIG](https://developer.apple.com/design/human-interface-guidelines/) without inventing guideline citations.
+
+2. **Read `references/hig-lookup.md`** (beside that skill) to find which guideline files cover the topic.
+
+3. **Load selectively** — never the whole directory:
+   - Always: `references/hig/accessibility.md`, `layout.md`, `typography.md`, `color.md`
+   - Platform overview: `designing-for-ios.md` or `designing-for-macos.md` as relevant
+   - Plus `references/cross-platform.md` unless the app is SwiftUI, UIKit, or AppKit
+   - Then 3–6 additional files for what is on screen
+
+4. **Cite every recommendation** as `file.md › Heading` with a short quote from the guideline.
+
+5. **Use the user's framework vocabulary.** For this repo that is primarily **React / Next.js (App Router) / Tailwind / PWA** — not Flutter, React Native, or SwiftUI unless the user is asking about those.
+
+6. **Severity and report format** (from `SKILL.md`):
+   - Tag each finding **Critical**, **High**, **Medium**, or **Low**
+   - Structure: **Summary**, **Critical**, **Improvements**, **Craft notes**, **What works**, **Platform notes**
+
+7. **Honesty**
+   - Cite a real guideline or label the point as your own judgment — never invent a guideline
+   - A strong design gets a short review, not a list of manufactured findings
+
+8. **Code and Apple Pay**
+   - When reviewing code (not screenshots), or any flow that takes Apple Pay, follow `references/code-audit.md`
+   - Cite `path:line` beside each guideline
+
+## Triggers
+
+Apply this process when the user asks to: review a design, audit UI/UX, check accessibility, improve a layout, adapt an app for iPhone Duo, implement Liquid Glass or glassmorphism, make a design less generic, review an app icon, widget, or Live Activity, audit a codebase for UI, check an Apple Pay checkout, or evaluate any visual or interaction design.
