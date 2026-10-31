@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useQuery } from "convex/react";
 import { Download, X } from "lucide-react";
 import { api } from "@/convex/_generated/api";
@@ -35,6 +35,7 @@ export function InstallPromptBanner() {
   const [ready, setReady] = useState(false);
   const [iosGuideOpen, setIosGuideOpen] = useState(false);
   const [visible, setVisible] = useState(false);
+  const bannerRef = useRef<HTMLDivElement>(null);
 
   const homeCurrency = user?.homeCurrency ?? BASE_CURRENCY;
   const brandIcon = iconPath(homeCurrency, 180);
@@ -59,6 +60,20 @@ export function InstallPromptBanner() {
     return () => window.cancelAnimationFrame(frame);
   }, [ready]);
 
+  useEffect(() => {
+    const el = bannerRef.current;
+    if (!visible || !el) return;
+    const root = document.documentElement;
+    const observer = new ResizeObserver(() => {
+      root.style.setProperty("--install-banner-space", `${el.offsetHeight + 12}px`);
+    });
+    observer.observe(el);
+    return () => {
+      observer.disconnect();
+      root.style.removeProperty("--install-banner-space");
+    };
+  }, [visible]);
+
   if (!mounted || standalone || dismissed || !canOfferInstall || !ready) {
     return null;
   }
@@ -81,6 +96,7 @@ export function InstallPromptBanner() {
   return (
     <>
       <div
+        ref={bannerRef}
         className={cn(
           "bottom-above-tab-bar fixed inset-x-3 z-40 lg:hidden",
           "transition-[transform,opacity] duration-300 ease-out",

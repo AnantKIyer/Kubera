@@ -348,6 +348,18 @@
   .pb-mobile-nav {
     padding-bottom: calc(var(--tab-bar-height) + var(--tab-bar-offset) + 1.5rem);
   }
+
+  /* Rises above the install banner while it is showing (it sets --install-banner-space). */
+  .new-transaction-position {
+    bottom: calc(
+      var(--tab-bar-height) + var(--tab-bar-offset) + 0.75rem + var(--install-banner-space, 0px)
+    );
+  }
+
+  /* Lets the last row of content scroll clear of the new-transaction button. */
+  .pb-mobile-nav-action {
+    padding-bottom: calc(var(--tab-bar-height) + var(--tab-bar-offset) + 1.5rem + 4.25rem);
+  }
 }
 
 ::-webkit-scrollbar {

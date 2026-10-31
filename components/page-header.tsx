@@ -1,13 +1,17 @@
 import { ReactNode } from "react";
+import { cn } from "@/lib/utils";
 
 export function PageHeader({
   title,
   description,
   action,
+  actionOnDesktopOnly = false,
 }: {
   title: string;
   description?: string;
   action?: ReactNode;
+  /** Hide the action on phones, where the tab bar's new-transaction button replaces it */
+  actionOnDesktopOnly?: boolean;
 }) {
   return (
     <div className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
@@ -22,7 +26,14 @@ export function PageHeader({
         )}
       </div>
       {action && (
-        <div className="flex shrink-0 items-center gap-2">{action}</div>
+        <div
+          className={cn(
+            "shrink-0 items-center gap-2",
+            actionOnDesktopOnly ? "hidden lg:flex" : "flex",
+          )}
+        >
+          {action}
+        </div>
       )}
     </div>
   );
