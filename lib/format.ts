@@ -17,8 +17,19 @@ const compactFormatter = new Intl.NumberFormat(LOCALE, {
   maximumFractionDigits: 1,
 });
 
+const wholeCurrencyFormatter = new Intl.NumberFormat(LOCALE, {
+  style: "currency",
+  currency: CURRENCY,
+  maximumFractionDigits: 0,
+});
+
 export function formatCurrency(value: number): string {
   return currencyFormatter.format(value);
+}
+
+/** Rounded to the rupee — for glanceable totals in tight spaces. */
+export function formatCurrencyWhole(value: number): string {
+  return wholeCurrencyFormatter.format(value);
 }
 
 export function formatCompactCurrency(value: number): string {

@@ -1,6 +1,6 @@
 "use client";
 
-import { ReactNode, useMemo } from "react";
+import { ReactNode, useEffect, useMemo } from "react";
 import { ClerkProvider } from "@clerk/nextjs";
 import { ConvexProviderWithAuth, ConvexReactClient } from "convex/react";
 import { ThemeProvider } from "@/components/theme-provider";
@@ -28,6 +28,20 @@ export function Providers({ children }: { children: ReactNode }) {
     () => (convexUrl ? new ConvexReactClient(convexUrl) : null),
     [],
   );
+
+  // next-pwa only skips *registering* in dev; a worker left over from a production
+  // build keeps serving cache-first copies of the unhashed dev chunks.
+  useEffect(() => {
+    if (process.env.NODE_ENV !== "development" || !("serviceWorker" in navigator)) return;
+    void (async () => {
+      const registrations = await navigator.serviceWorker.getRegistrations();
+      if (registrations.length === 0) return;
+      await Promise.all(registrations.map((r) => r.unregister()));
+      const keys = await caches.keys();
+      await Promise.all(keys.map((k) => caches.delete(k)));
+      window.location.reload();
+    })();
+  }, []);
 
   if (!client) {
     return (

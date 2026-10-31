@@ -36,11 +36,12 @@ export function StatCard({
   signed?: boolean;
 }) {
   const prefix = signed ? tonePrefix[tone] : undefined;
+  const chars = (prefix ?? "").length + value.length;
 
   return (
     <Card
       className={cn(
-        "relative overflow-hidden p-5 transition-colors",
+        "relative overflow-hidden p-5 transition-colors [container-type:inline-size]",
         highlight && "bg-aurora",
       )}
     >
@@ -60,10 +61,12 @@ export function StatCard({
       </div>
       <p
         className={cn(
-          "mt-3 text-[26px] font-semibold tracking-tight tabular-nums sm:text-[28px]",
+          "mt-3 whitespace-nowrap font-semibold tracking-tight tabular-nums [--stat-max:26px] sm:[--stat-max:28px]",
           tone === "income" && "text-[hsl(var(--income))]",
           tone === "expense" && "text-foreground",
         )}
+        // Shrinks long amounts to the card width instead of wrapping the sign onto its own line.
+        style={{ fontSize: `clamp(16px, calc(100cqi / ${(chars * 0.62).toFixed(2)}), var(--stat-max))` }}
       >
         {prefix ? (
           <span className="sr-only">

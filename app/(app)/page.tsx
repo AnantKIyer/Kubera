@@ -29,6 +29,7 @@ import {
 import {
   currentMonth,
   formatCurrency,
+  formatCurrencyWhole,
   formatMonth,
   formatPercent,
   monthRange,
@@ -84,6 +85,7 @@ export default function DashboardPage() {
       <PageHeader
         title="Dashboard"
         description={`Your money at a glance · ${formatMonth(month)}`}
+        actionOnDesktopOnly
         action={
           <>
             <Button variant="outline" size="md" onClick={() => openNew("income")}>
@@ -106,7 +108,7 @@ export default function DashboardPage() {
           <>
             <StatCard
               title="Balance"
-              value={formatCurrency(insights.accountBalances.totalBankBalance)}
+              value={formatCurrencyWhole(insights.accountBalances.totalBankBalance)}
               icon={Wallet}
               tone="balance"
               highlight
@@ -118,7 +120,7 @@ export default function DashboardPage() {
             />
             <StatCard
               title="Income"
-              value={formatCurrency(stats.totalIncome)}
+              value={formatCurrencyWhole(stats.totalIncome)}
               icon={ArrowUpRight}
               tone="income"
               signed
@@ -126,7 +128,7 @@ export default function DashboardPage() {
             />
             <StatCard
               title="Expenses"
-              value={formatCurrency(stats.totalExpenses)}
+              value={formatCurrencyWhole(stats.totalExpenses)}
               icon={ArrowDownLeft}
               tone="expense"
               signed

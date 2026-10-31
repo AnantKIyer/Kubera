@@ -37,6 +37,17 @@ export const MOBILE_PRIMARY_NAV = NAV_ITEMS.slice(0, 4);
 /** Secondary routes opened from the mobile “More” menu. */
 export const MOBILE_MORE_NAV = NAV_ITEMS.slice(4);
 
+/**
+ * Phone routes that get the floating new-transaction button. Pages whose own
+ * primary action is also a “+” (budgets, accounts, groups…) are left out so
+ * the symbol keeps one meaning.
+ */
+const NEW_TRANSACTION_ROUTES = new Set(["/", "/transactions", "/analytics"]);
+
+export function showsNewTransactionButton(pathname: string) {
+  return NEW_TRANSACTION_ROUTES.has(pathname);
+}
+
 export function isNavActive(pathname: string, href: string) {
   if (href === "/accounts") {
     return pathname.startsWith("/accounts") || pathname.startsWith("/emis");

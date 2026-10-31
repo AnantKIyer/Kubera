@@ -52,6 +52,7 @@ export default function TransactionsPage() {
       <PageHeader
         title="Transactions"
         description="Every rupee in and out, in one place."
+        actionOnDesktopOnly
         action={
           <Button onClick={openNew}>
             <Plus size={16} /> Add transaction
