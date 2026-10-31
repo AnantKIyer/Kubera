@@ -17,6 +17,10 @@ interface DatePickerProps {
   className?: string;
   /** Earliest selectable date (YYYY-MM-DD). Dates before this are disabled. */
   minDate?: string;
+  /** "row": label + value as one line, for use inside FormRows */
+  variant?: "field" | "row";
+  /** Row label; required for the "row" variant */
+  label?: string;
 }
 
 export function DatePicker({
@@ -28,6 +32,8 @@ export function DatePicker({
   placeholder = "Pick a date",
   className,
   minDate,
+  variant = "field",
+  label,
 }: DatePickerProps) {
   const autoId = useId();
   const id = idProp ?? autoId;
@@ -215,7 +221,7 @@ export function DatePicker({
                 className={cn(
                   "flex-1 rounded-lg px-2 py-1.5 text-xs font-medium transition-colors",
                   value === todayIso || value === minDate
-                    ? "bg-primary/12 text-primary"
+                    ? "bg-primary/12 text-accent-foreground"
                     : "text-muted-foreground hover:bg-muted/50 hover:text-foreground",
                 )}
               >
@@ -246,6 +252,47 @@ export function DatePicker({
           document.body,
         )
       : null;
+
+  if (variant === "row") {
+    return (
+      <div className={cn("relative", className)}>
+        <button
+          ref={triggerRef}
+          type="button"
+          id={id}
+          disabled={disabled}
+          aria-haspopup="dialog"
+          aria-expanded={open}
+          onClick={() => setOpen((v) => !v)}
+          className={cn(
+            "flex min-h-12 w-full items-center justify-between gap-3 px-4 text-left transition-colors hover:bg-muted/60 focus-visible:bg-muted/70 focus-visible:outline-none",
+            open && "bg-muted/60",
+            disabled && "cursor-not-allowed opacity-50",
+          )}
+        >
+          <span className="shrink-0 text-[15px] text-foreground">{label}</span>
+          <span className="flex min-w-0 items-center gap-1 text-[15px] text-muted-foreground">
+            <span className="truncate">
+              {value ? formatDayLabel(value) : placeholder}
+              {value && formatDayLabel(value) !== formatDate(value) && ` · ${formatDate(value)}`}
+            </span>
+            <ChevronDown
+              size={14}
+              aria-hidden
+              className={cn(
+                "shrink-0 opacity-70 transition-transform duration-200",
+                open && "rotate-180",
+              )}
+            />
+          </span>
+        </button>
+        {required && (
+          <input type="hidden" value={value} required={required} tabIndex={-1} aria-hidden />
+        )}
+        {panel}
+      </div>
+    );
+  }
 
   return (
     <div className={cn("relative", className)}>

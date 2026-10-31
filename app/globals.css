@@ -32,6 +32,10 @@
 
     /* iOS-adjacent continuous corners */
     --radius: 0.875rem;
+
+    /* Floating tab bar: 3.25rem tabs + 0.25rem inset on each side */
+    --tab-bar-height: 3.75rem;
+    --tab-bar-offset: max(0.5rem, env(safe-area-inset-bottom, 0px));
   }
 
   .dark {
@@ -333,9 +337,16 @@
     padding-bottom: env(safe-area-inset-bottom, 0px);
   }
 
+  .tab-bar-position {
+    bottom: var(--tab-bar-offset);
+  }
+
+  .bottom-above-tab-bar {
+    bottom: calc(var(--tab-bar-height) + var(--tab-bar-offset) + 0.75rem);
+  }
+
   .pb-mobile-nav {
-    /* Tab bar ~44pt + labels + safe area */
-    padding-bottom: calc(5.25rem + env(safe-area-inset-bottom, 0px));
+    padding-bottom: calc(var(--tab-bar-height) + var(--tab-bar-offset) + 1.5rem);
   }
 }
 

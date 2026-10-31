@@ -42,6 +42,9 @@ module.exports = {
         income: "hsl(var(--income))",
         expense: "hsl(var(--expense))",
       },
+      opacity: {
+        12: "0.12",
+      },
       borderRadius: {
         xl: "calc(var(--radius) + 4px)",
         lg: "var(--radius)",
@@ -62,6 +65,8 @@ module.exports = {
         soft: "0 1px 2px rgb(0 0 0 / 0.04), 0 4px 16px -6px rgb(0 0 0 / 0.08)",
         glow: "0 1px 8px -2px hsl(var(--primary) / 0.22)",
         sheet: "0 -8px 40px rgb(0 0 0 / 0.12)",
+        "tab-bar":
+          "0 0 0 0.5px hsl(var(--border)), 0 8px 28px -10px rgb(0 0 0 / 0.22)",
       },
       transitionTimingFunction: {
         spring: "cubic-bezier(0.22, 1, 0.36, 1)",

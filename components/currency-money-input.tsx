@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useAction } from "convex/react";
 import { api } from "@/convex/_generated/api";
-import { RefreshCw } from "lucide-react";
+import { ChevronDown, RefreshCw } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
   BASE_CURRENCY,
@@ -15,7 +15,6 @@ import {
   LOG_CURRENCIES,
 } from "@/lib/currency";
 import { formatCurrency } from "@/lib/format";
-import { Select } from "@/components/ui/form";
 
 interface CurrencyMoneyInputProps {
   value: string;
@@ -95,24 +94,33 @@ export function CurrencyMoneyInput({
           {label}
         </p>
         {!forceBaseCurrency && (
-          <Select
-            value={effectiveCurrency}
-            onChange={(e) => onCurrencyChange(e.target.value)}
-            disabled={disabled}
-            className="h-8 w-auto min-w-[7.5rem] py-1 text-xs"
-          >
-            {LOG_CURRENCIES.map((option) => (
-              <option key={option.code} value={option.code}>
-                {option.code} · {option.label}
-              </option>
-            ))}
-          </Select>
+          <label className="relative -my-2 inline-flex min-h-11 cursor-pointer items-center gap-1 rounded-full bg-card px-3 text-[13px] font-semibold text-foreground ring-1 ring-border/80 transition-colors focus-within:ring-2 focus-within:ring-primary/30 hover:bg-muted/50">
+            {effectiveCurrency}
+            <ChevronDown size={14} className="text-muted-foreground" aria-hidden />
+            <select
+              aria-label="Currency"
+              value={effectiveCurrency}
+              onChange={(e) => onCurrencyChange(e.target.value)}
+              disabled={disabled}
+              className="absolute inset-0 h-full w-full cursor-pointer appearance-none opacity-0 disabled:cursor-not-allowed"
+            >
+              {LOG_CURRENCIES.map((option) => (
+                <option key={option.code} value={option.code}>
+                  {option.code} · {option.label}
+                </option>
+              ))}
+            </select>
+          </label>
         )}
       </div>
 
-      <div className="mt-2 flex items-baseline justify-center gap-1">
-        <span className="text-2xl font-medium text-muted-foreground">{symbol}</span>
+      <label className="mt-2 flex cursor-text items-baseline justify-center gap-1">
+        <span className="text-2xl font-medium text-muted-foreground" aria-hidden>
+          {symbol}
+        </span>
         <input
+          aria-label={`${label} in ${effectiveCurrency}`}
+          style={{ width: `${Math.max(value.length, 1) + 0.5}ch` }}
           type="number"
           step={effectiveCurrency === "JPY" ? "1" : "0.01"}
           min={effectiveCurrency === "JPY" ? "1" : "0.01"}
@@ -123,9 +131,9 @@ export function CurrencyMoneyInput({
           autoFocus={autoFocus}
           disabled={disabled}
           placeholder="0"
-          className="w-full max-w-[220px] bg-transparent text-center text-4xl font-bold tabular-nums tracking-tight text-foreground outline-none placeholder:text-muted-foreground/30"
+          className="min-h-11 min-w-0 max-w-full bg-transparent [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none text-center text-4xl font-bold tabular-nums tracking-tight text-foreground outline-none placeholder:text-muted-foreground/30"
         />
-      </div>
+      </label>
 
       {isForeign && (
         <div className="mt-3 space-y-2 border-t border-border/40 pt-3">
@@ -137,7 +145,7 @@ export function CurrencyMoneyInput({
               <button
                 type="button"
                 onClick={() => void fetchRate(effectiveCurrency, transactionDate)}
-                className="inline-flex items-center gap-1.5 text-xs font-medium text-primary hover:underline"
+                className="inline-flex items-center gap-1.5 text-xs font-medium text-accent-foreground hover:underline"
               >
                 <RefreshCw size={12} />
                 Retry
