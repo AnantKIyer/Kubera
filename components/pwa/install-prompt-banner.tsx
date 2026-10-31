@@ -82,8 +82,7 @@ export function InstallPromptBanner() {
     <>
       <div
         className={cn(
-          "fixed inset-x-3 z-40 lg:hidden",
-          "bottom-[calc(4.5rem+env(safe-area-inset-bottom,0px)+0.75rem)]",
+          "bottom-above-tab-bar fixed inset-x-3 z-40 lg:hidden",
           "transition-[transform,opacity] duration-300 ease-out",
           visible ? "translate-y-0 opacity-100" : "translate-y-3 opacity-0",
         )}

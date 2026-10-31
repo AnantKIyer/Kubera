@@ -42,7 +42,7 @@ export function UserMenu({ compact = false }: { compact?: boolean }) {
         className={cn(
           "inline-flex min-h-11 min-w-11 items-center justify-center rounded-full transition-colors",
           settingsActive
-            ? "bg-primary/12 text-primary"
+            ? "bg-primary/12 text-accent-foreground"
             : "text-muted-foreground hover:bg-muted/60 hover:text-foreground",
         )}
         aria-label="Account settings"
@@ -64,7 +64,7 @@ export function UserMenu({ compact = false }: { compact?: boolean }) {
         className={cn(
           "flex min-h-11 items-center gap-3 rounded-[12px] px-3 py-2.5 transition-colors",
           settingsActive
-            ? "bg-primary/12 text-primary"
+            ? "bg-primary/12 text-accent-foreground"
             : "hover:bg-muted/70",
         )}
       >

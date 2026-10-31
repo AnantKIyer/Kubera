@@ -7,8 +7,10 @@ import {
   SelectHTMLAttributes,
   TextareaHTMLAttributes,
   forwardRef,
+  useMemo,
+  useState,
 } from "react";
-import { ChevronDown, type LucideIcon } from "lucide-react";
+import { Check, ChevronDown, ChevronsUpDown, type LucideIcon } from "lucide-react";
 
 /* ── Labels & layout ─────────────────────────────────────────────── */
 
@@ -360,63 +362,191 @@ export function IconPicker({
   );
 }
 
-export function CategoryChips<T extends string>({
+const CATEGORY_GRID_COLLAPSED = 8;
+
+/**
+ * Icon tiles, two rows by default. No selection means uncategorized; tapping the
+ * selected tile clears it. Category colors only tint the icon well — never sit
+ * behind text, since the palette is too light for legible labels.
+ */
+export function CategoryGrid<T extends string>({
+  label = "Category",
   items,
   value,
   onChange,
   getIcon,
-  allowClear = true,
 }: {
+  label?: string;
   items: { id: T; name: string; color: string; icon: string }[];
   value: T | "";
   onChange: (id: T | "") => void;
   getIcon: (key: string) => LucideIcon;
-  /** Show an “Uncategorized” chip that clears the selection */
-  allowClear?: boolean;
 }) {
-  if (items.length === 0 && !allowClear) return null;
+  const [expanded, setExpanded] = useState(false);
+  const ordered = useMemo(
+    () => [
+      ...items.filter((c) => !/^other\b/i.test(c.name)),
+      ...items.filter((c) => /^other\b/i.test(c.name)),
+    ],
+    [items],
+  );
+  const collapsible = ordered.length > CATEGORY_GRID_COLLAPSED;
+  const visible = useMemo(() => {
+    if (!collapsible || expanded) return ordered;
+    const head = ordered.slice(0, CATEGORY_GRID_COLLAPSED);
+    const selected = ordered.find((c) => c.id === value);
+    if (!selected || head.includes(selected)) return head;
+    return [...head.slice(0, CATEGORY_GRID_COLLAPSED - 1), selected];
+  }, [collapsible, expanded, ordered, value]);
+  const selectedName = ordered.find((c) => c.id === value)?.name;
+
   return (
-    <div className="flex flex-wrap gap-2" role="listbox" aria-label="Category">
-      {allowClear && (
+    <div>
+      <div className="mb-1.5 flex min-h-6 items-center justify-between gap-3">
+        <span className="text-[13px] font-medium text-muted-foreground">{label}</span>
+        {selectedName ? (
+          <button
+            type="button"
+            onClick={() => onChange("")}
+            className="-my-2.5 -mr-2 min-h-11 rounded-lg px-2 text-[13px] font-medium text-accent-foreground hover:bg-muted/60"
+          >
+            Clear
+          </button>
+        ) : (
+          <span className="text-[13px] text-muted-foreground">Optional</span>
+        )}
+      </div>
+      <div role="group" aria-label={label} className="grid grid-cols-4 gap-1">
+        {visible.map((c) => {
+          const Icon = getIcon(c.icon);
+          const active = value === c.id;
+          return (
+            <button
+              key={c.id}
+              type="button"
+              aria-pressed={active}
+              onClick={() => onChange(active ? "" : c.id)}
+              className={cn(
+                "flex min-h-[4.75rem] min-w-0 flex-col items-center gap-1.5 rounded-2xl px-1 pb-2 pt-2 text-center transition-colors",
+                active
+                  ? "bg-accent ring-[1.5px] ring-inset ring-primary"
+                  : "hover:bg-muted/50 active:bg-muted/70",
+              )}
+            >
+              <span
+                className="relative flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-foreground/80"
+                style={{ backgroundColor: `${c.color}40` }}
+              >
+                <Icon size={18} strokeWidth={1.9} aria-hidden />
+                {active && (
+                  <span className="absolute -right-1.5 -top-1.5 flex h-[18px] w-[18px] items-center justify-center rounded-full bg-primary text-primary-foreground ring-2 ring-accent">
+                    <Check size={11} strokeWidth={3} aria-hidden />
+                  </span>
+                )}
+              </span>
+              <span
+                lang="en"
+                className={cn(
+                  "line-clamp-2 w-full hyphens-auto text-caption leading-tight [overflow-wrap:anywhere]",
+                  active ? "font-semibold text-accent-foreground" : "text-muted-foreground",
+                )}
+              >
+                {c.name}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+      {collapsible && (
         <button
           type="button"
-          role="option"
-          aria-selected={value === ""}
-          onClick={() => onChange("")}
-          className={cn(
-            "inline-flex min-h-11 items-center gap-1.5 rounded-full border px-3.5 text-sm font-medium transition-all",
-            value === ""
-              ? "border-foreground/25 bg-foreground/[0.08] font-semibold text-foreground shadow-sm ring-1 ring-foreground/15"
-              : "border-border/60 bg-muted/20 text-muted-foreground hover:border-border hover:text-foreground",
-          )}
+          onClick={() => setExpanded((v) => !v)}
+          aria-expanded={expanded}
+          className="mt-1 inline-flex min-h-11 items-center gap-1 rounded-lg px-2 text-sm font-medium text-accent-foreground hover:bg-muted/60"
         >
-          Uncategorized
+          {expanded ? "Show fewer" : `Show all ${ordered.length}`}
+          <ChevronDown
+            size={16}
+            aria-hidden
+            className={cn("transition-transform duration-200", expanded && "rotate-180")}
+          />
         </button>
       )}
-      {items.map((c) => {
-        const Icon = getIcon(c.icon);
-        const active = value === c.id;
-        return (
-          <button
-            key={c.id}
-            type="button"
-            role="option"
-            aria-selected={active}
-            onClick={() => onChange(active && allowClear ? "" : c.id)}
-            className={cn(
-              "inline-flex min-h-11 items-center gap-2 rounded-full border px-3.5 text-sm font-medium transition-all",
-              active
-                ? "border-transparent font-semibold text-white shadow-sm ring-2 ring-foreground/20 ring-offset-1 ring-offset-background"
-                : "border-border/60 bg-muted/20 text-muted-foreground hover:border-border hover:text-foreground",
-            )}
-            style={active ? { backgroundColor: c.color } : undefined}
-          >
-            <Icon size={14} className="shrink-0" aria-hidden />
-            {c.name}
-          </button>
-        );
-      })}
     </div>
+  );
+}
+
+/** Inset grouped rows (iOS Settings style) for compact value pickers. */
+export function FormRows({ children }: { children: ReactNode }) {
+  return (
+    <div className="divide-y divide-border/60 overflow-hidden rounded-2xl bg-muted/40">
+      {children}
+    </div>
+  );
+}
+
+export function TextRow({
+  label,
+  className,
+  ...props
+}: { label: string } & InputHTMLAttributes<HTMLInputElement>) {
+  return (
+    <label className="flex min-h-12 cursor-text items-center gap-3 px-4 transition-colors focus-within:bg-muted/70">
+      <span className="shrink-0 text-[15px] text-foreground">{label}</span>
+      <input
+        aria-label={label}
+        className={cn(
+          "min-h-11 min-w-0 flex-1 bg-transparent text-right text-[15px] text-foreground outline-none placeholder:text-muted-foreground",
+          className,
+        )}
+        {...props}
+      />
+    </label>
+  );
+}
+
+/**
+ * Whole-row tap target backed by a native <select>, so phones open the system picker.
+ */
+export function SelectRow({
+  label,
+  value,
+  onChange,
+  options,
+  placeholder,
+  required,
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  options: { value: string; label: string }[];
+  /** Label for the empty value; omit to hide the empty option */
+  placeholder?: string;
+  required?: boolean;
+}) {
+  const current = options.find((o) => o.value === value)?.label ?? placeholder ?? "";
+  return (
+    <label className="relative flex min-h-12 cursor-pointer items-center justify-between gap-3 px-4 transition-colors focus-within:bg-muted/70 hover:bg-muted/60">
+      <span className="shrink-0 text-[15px] text-foreground">{label}</span>
+      <span className="flex min-w-0 items-center gap-1 text-[15px] text-muted-foreground">
+        <span className="truncate">{current}</span>
+        <ChevronsUpDown size={14} className="shrink-0 opacity-70" aria-hidden />
+      </span>
+      <select
+        aria-label={label}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        required={required}
+        className="absolute inset-0 h-full w-full cursor-pointer appearance-none opacity-0"
+      >
+        {placeholder !== undefined && <option value="">{placeholder}</option>}
+        {options.map((o) => (
+          <option key={o.value} value={o.value}>
+            {o.label}
+          </option>
+        ))}
+      </select>
+    </label>
   );
 }
 
@@ -469,7 +599,8 @@ export function FormFooter({
   disabled,
   formId,
 }: {
-  onCancel: () => void;
+  /** Omit when the sheet's close button is the only dismiss control */
+  onCancel?: () => void;
   cancelLabel?: string;
   submitLabel: string;
   loading?: boolean;
@@ -479,13 +610,15 @@ export function FormFooter({
 }) {
   return (
     <div className="flex items-center gap-2.5">
-      <button
-        type="button"
-        onClick={onCancel}
-        className="min-h-11 shrink-0 rounded-xl px-4 text-sm font-medium text-muted-foreground transition-colors hover:bg-muted/40 hover:text-foreground"
-      >
-        {cancelLabel}
-      </button>
+      {onCancel && (
+        <button
+          type="button"
+          onClick={onCancel}
+          className="min-h-11 shrink-0 rounded-xl px-4 text-sm font-medium text-muted-foreground transition-colors hover:bg-muted/40 hover:text-foreground"
+        >
+          {cancelLabel}
+        </button>
+      )}
       <button
         type="submit"
         form={formId}

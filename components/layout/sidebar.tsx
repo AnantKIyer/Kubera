@@ -4,27 +4,31 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
 import { MoreHorizontal } from "lucide-react";
-import { MOBILE_MORE_NAV, MOBILE_PRIMARY_NAV, NAV_ITEMS } from "@/lib/nav";
+import {
+  MOBILE_MORE_NAV,
+  MOBILE_PRIMARY_NAV,
+  NAV_ITEMS,
+  isNavActive as isActive,
+} from "@/lib/nav";
 import { cn } from "@/lib/utils";
 import { Logo } from "./logo";
 import { UserMenu } from "./user-menu";
 import { MobileMoreSheet } from "./mobile-more-sheet";
-
-function isActive(pathname: string, href: string) {
-  if (href === "/accounts") {
-    return pathname.startsWith("/accounts") || pathname.startsWith("/emis");
-  }
-  if (href === "/groups") {
-    return pathname.startsWith("/groups");
-  }
-  return href === "/" ? pathname === "/" : pathname.startsWith(href);
-}
 
 function isMoreActive(pathname: string) {
   return (
     pathname === "/settings" ||
     MOBILE_MORE_NAV.some((item) => isActive(pathname, item.href))
   );
+}
+
+const tabClassName =
+  "flex min-h-[3.25rem] min-w-0 flex-1 flex-col items-center justify-center gap-0.5 overflow-hidden rounded-[18px] px-0.5 text-caption font-medium transition-colors duration-200 motion-reduce:transition-none";
+
+function tabStateClassName(active: boolean) {
+  return active
+    ? "bg-primary/12 text-accent-foreground"
+    : "text-muted-foreground active:bg-muted/70";
 }
 
 export function Sidebar() {
@@ -47,7 +51,7 @@ export function Sidebar() {
               className={cn(
                 "flex min-h-11 items-center gap-3 rounded-[12px] px-3 py-2.5 text-[15px] font-medium tracking-tight transition-colors duration-200",
                 active
-                  ? "bg-primary/12 text-primary"
+                  ? "bg-primary/12 text-accent-foreground"
                   : "text-muted-foreground hover:bg-muted/70 hover:text-foreground",
               )}
             >
@@ -76,8 +80,11 @@ export function MobileNav() {
 
   return (
     <>
-      <nav className="fixed inset-x-0 bottom-0 z-30 border-t border-border/50 glass pb-safe lg:hidden">
-        <div className="flex px-1 pt-1">
+      <nav
+        aria-label="Primary"
+        className="tab-bar-position fixed inset-x-3 z-30 mx-auto max-w-md rounded-[24px] glass shadow-tab-bar lg:hidden"
+      >
+        <div className="flex gap-0.5 p-1">
           {MOBILE_PRIMARY_NAV.map((item) => {
             const active = isActive(pathname, item.href);
             const Icon = item.icon;
@@ -85,28 +92,25 @@ export function MobileNav() {
               <Link
                 key={item.href}
                 href={item.href}
-                className={cn(
-                  "flex min-h-11 min-w-0 flex-1 flex-col items-center justify-center gap-0.5 rounded-lg px-1 py-1.5 text-caption font-medium transition-colors",
-                  active ? "text-primary" : "text-muted-foreground",
-                )}
+                aria-current={active ? "page" : undefined}
+                className={cn(tabClassName, tabStateClassName(active))}
               >
                 <Icon size={22} strokeWidth={active ? 2.25 : 1.75} aria-hidden />
-                <span className="truncate">{item.label}</span>
+                <span className="block w-full min-w-0 truncate text-center">
+                  {item.shortLabel ?? item.label}
+                </span>
               </Link>
             );
           })}
           <button
             type="button"
             onClick={() => setMoreOpen(true)}
-            className={cn(
-              "flex min-h-11 min-w-0 flex-1 flex-col items-center justify-center gap-0.5 rounded-lg px-1 py-1.5 text-caption font-medium transition-colors",
-              moreActive ? "text-primary" : "text-muted-foreground",
-            )}
-            aria-label="More navigation"
+            className={cn(tabClassName, tabStateClassName(moreActive))}
+            aria-haspopup="dialog"
             aria-expanded={moreOpen}
           >
             <MoreHorizontal size={22} strokeWidth={moreActive ? 2.25 : 1.75} aria-hidden />
-            <span>More</span>
+            <span className="block w-full min-w-0 truncate text-center">More</span>
           </button>
         </div>
       </nav>
